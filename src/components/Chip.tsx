@@ -46,7 +46,7 @@ export function Chip({ value, onClick, selected = false, size = 'md', disabled =
       opacity: 1,
       scale: 1,
       transition: {
-        type: 'spring',
+        type: 'spring' as const,
         stiffness: 300,
         damping: 20,
         delay: index * 0.1,
@@ -169,7 +169,7 @@ export function ChipStack({ total, maxDisplay = 5, animate = false }: ChipStackP
       opacity: 1,
       scale: 1,
       transition: {
-        type: 'spring',
+        type: 'spring' as const,
         stiffness: 400,
         damping: 25,
       },
