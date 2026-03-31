@@ -30,7 +30,7 @@ export function LobbyView() {
     if (table.players.length >= table.maxPlayers) {
       return <Badge className="bg-red-600">Dolu</Badge>;
     }
-    if (['playing', 'dealing', 'dealer_turn'].includes(table.status)) {
+    if (['playing', 'dealing', 'dealer_turn', 'dealer-turn'].includes(table.status)) {
       return <Badge className="bg-yellow-600">Oyunda</Badge>;
     }
     return <Badge className="bg-green-600">Açık</Badge>;
@@ -80,7 +80,7 @@ export function LobbyView() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tables.map((table) => {
             const isFull = table.players.length >= table.maxPlayers;
-            const isPlaying = ['playing', 'dealing', 'dealer_turn'].includes(table.status);
+            const isPlaying = ['playing', 'dealing', 'dealer_turn', 'dealer-turn'].includes(table.status);
 
             return (
               <div
