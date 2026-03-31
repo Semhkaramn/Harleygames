@@ -91,6 +91,8 @@ interface GameStore extends GameState {
   fetchRooms: () => Promise<void>;
   createRoom: (name: string, minBet: number, maxBet: number) => Promise<string | null>;
   joinRoom: (roomId: string, seatNumber: number) => Promise<boolean>;
+  joinRoomAuto: (roomId: string) => Promise<boolean>;
+  changeSeat: (newSeatNumber: number) => Promise<boolean>;
   leaveRoom: () => Promise<void>;
   setReady: () => Promise<void>;
   placeBet: (amount: number) => Promise<void>;
@@ -215,7 +217,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!response.ok) throw new Error('Failed to fetch rooms');
 
       const data = await response.json();
-      const rooms = (data.rooms || []).map((r: DBRoom) => mapDBRoomToRoom(r));
+      const rooms = (data.rooms || []).map((r: DBRoom & { players?: DBRoomPlayer[] }) =>
+        mapDBRoomToRoom(r, r.players || [])
+      );
       set({ rooms });
     } catch (error) {
       console.error('Fetch rooms error:', error);
@@ -242,7 +246,53 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!response.ok) throw new Error('Failed to create room');
 
       const data = await response.json();
-      return data.room?.id || null;
+      const roomId = data.room?.id;
+
+      if (roomId) {
+        // Oda oluşturuldu, şimdi oda detaylarını al ve odaya geç
+        const roomResponse = await fetch(`/api/rooms?id=${roomId}`);
+        if (roomResponse.ok) {
+          const roomData = await roomResponse.json();
+          const room = roomData.room;
+
+          // ActiveGame oluştur
+          const players: Player[] = (room.players || []).map((p: DBRoomPlayer) => ({
+            id: String(p.id),
+            telegramId: p.telegram_id,
+            name: p.first_name || p.username || 'Oyuncu',
+            avatar: p.photo_url || '',
+            balance: p.chips || 0,
+            seatNumber: p.seat_number,
+            cards: [],
+            bet: 0,
+            status: 'waiting' as const,
+            isCurrentUser: p.telegram_id === currentUser.telegramId,
+            totalScore: 0,
+            isTurn: false,
+          }));
+
+          set({
+            activeGame: {
+              id: 0,
+              roomId: room.id,
+              roomName: room.name,
+              status: room.status || 'waiting',
+              minBet: room.min_bet,
+              maxBet: room.max_bet,
+              players,
+              dealerCards: [],
+              dealerScore: 0,
+              currentPlayerIndex: -1,
+              countdown: 0,
+              turnTimer: 15,
+              bettingEndTime: null,
+            },
+            view: 'room',
+          });
+        }
+      }
+
+      return roomId || null;
     } catch (error) {
       console.error('Create room error:', error);
       return null;
@@ -317,6 +367,79 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return true;
     } catch (error) {
       console.error('Join room error:', error);
+      return false;
+    }
+  },
+
+  // API: Join room automatically (first available seat)
+  joinRoomAuto: async (roomId) => {
+    const { currentUser, rooms } = get();
+    if (!currentUser) return false;
+
+    // Find the room to get occupied seats
+    const room = rooms.find(r => r.id === roomId);
+    if (!room) return false;
+
+    // Find first available seat (1-6)
+    const occupiedSeats = room.players.map(p => p.seatNumber);
+    let firstAvailableSeat = null;
+    for (let seat = 1; seat <= 6; seat++) {
+      if (!occupiedSeats.includes(seat)) {
+        firstAvailableSeat = seat;
+        break;
+      }
+    }
+
+    if (!firstAvailableSeat) {
+      console.error('No available seats');
+      return false;
+    }
+
+    // Use existing joinRoom with the first available seat
+    return get().joinRoom(roomId, firstAvailableSeat);
+  },
+
+  // API: Change seat
+  changeSeat: async (newSeatNumber) => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return false;
+
+    try {
+      const response = await fetch('/api/rooms', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'change_seat',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+          seat_number: newSeatNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Change seat error:', error);
+        return false;
+      }
+
+      // Update local state
+      set((state) => {
+        if (!state.activeGame) return {};
+        return {
+          activeGame: {
+            ...state.activeGame,
+            players: state.activeGame.players.map(p =>
+              p.telegramId === currentUser.telegramId
+                ? { ...p, seatNumber: newSeatNumber }
+                : p
+            ),
+          },
+        };
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Change seat error:', error);
       return false;
     }
   },
