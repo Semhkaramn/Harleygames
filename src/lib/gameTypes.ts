@@ -63,20 +63,6 @@ export interface Room {
   status: 'waiting' | 'playing';
 }
 
-// Tournament Types
-export interface Tournament {
-  id: string;
-  name: string;
-  entryFee: number;
-  prizePool: number;
-  players: number;
-  maxPlayers: number;
-  status: 'registering' | 'running' | 'finished';
-  startTime: Date;
-  rounds: number;
-  currentRound: number;
-}
-
 // Utility Functions
 export function createDeck(): Card[] {
   const deck: Card[] = [];
@@ -130,17 +116,4 @@ export function isBust(cards: Card[]): boolean {
 }
 
 // Avatar options
-export const AVATARS = [
-  '🎭', '🎪', '🎰', '🃏', '👑', '💎',
-  '🦁', '🐺', '🦊', '🐯', '🦅', '🐉',
-];
-
-// Generate random player name
-export function generatePlayerName(): string {
-  const adjectives = ['Lucky', 'Wild', 'Royal', 'Golden', 'Silver', 'Diamond', 'Ace', 'King', 'Queen'];
-  const nouns = ['Player', 'Gambler', 'Shark', 'Wolf', 'Tiger', 'Eagle', 'Phoenix', 'Dragon'];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  const num = Math.floor(Math.random() * 100);
-  return `${adj}${noun}${num}`;
-}
+export const AVATARS = ['🎭', '🎪', '🎰', '🃏', '👑', '💎', '🦁', '🐺', '🦊', '🐯', '🦅', '🐉'];
