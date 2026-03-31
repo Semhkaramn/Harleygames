@@ -4,7 +4,7 @@ import type { Player } from '@/types/game';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CardStack } from './PlayingCard';
-import { BetDisplay } from './Chip';
+import { Plus } from 'lucide-react';
 
 interface PlayerSlotProps {
   player?: Player;
@@ -15,112 +15,114 @@ interface PlayerSlotProps {
   isEmpty: boolean;
 }
 
-const statusLabels: Record<string, { text: string; color: string }> = {
-  waiting: { text: 'Bekliyor', color: 'text-gray-400' },
-  ready: { text: 'Hazır', color: 'text-green-400' },
-  betting: { text: 'Bahis...', color: 'text-yellow-400' },
-  playing: { text: 'Oynuyor', color: 'text-blue-400' },
-  stand: { text: 'Stand', color: 'text-gray-400' },
-  bust: { text: 'Bust!', color: 'text-red-500' },
-  blackjack: { text: 'Blackjack!', color: 'text-yellow-400' },
-  won: { text: 'Kazandı!', color: 'text-green-400' },
-  lost: { text: 'Kaybetti', color: 'text-red-400' },
-  push: { text: 'Berabere', color: 'text-gray-400' },
-  disconnected: { text: 'Bağlantı Koptu', color: 'text-red-500' },
-  spectating: { text: 'İzliyor', color: 'text-gray-500' },
+const statusColors: Record<string, string> = {
+  waiting: 'border-gray-500',
+  ready: 'border-green-500',
+  betting: 'border-yellow-500',
+  playing: 'border-blue-500',
+  stand: 'border-gray-400',
+  bust: 'border-red-500',
+  blackjack: 'border-yellow-400',
+  won: 'border-green-400',
+  lost: 'border-red-400',
+  push: 'border-gray-400',
+  disconnected: 'border-red-600',
+  spectating: 'border-gray-600',
 };
 
 export function PlayerSlot({ player, seatIndex, isActive, turnTimer = 15, onSit, isEmpty }: PlayerSlotProps) {
-  // Boş koltuk
+  // Boş koltuk - Yuvarlak + işareti
   if (isEmpty || !player) {
     return (
       <button
         type="button"
         onClick={onSit}
         className={cn(
-          'flex flex-col items-center justify-center p-4 rounded-xl',
-          'border-2 border-dashed border-green-700/50 hover:border-green-500',
-          'bg-green-900/20 hover:bg-green-900/40 transition-all duration-200',
-          'min-w-[120px] min-h-[160px]'
+          'flex items-center justify-center',
+          'w-12 h-12 rounded-full',
+          'border-2 border-dashed border-green-600/50',
+          'hover:border-green-400 hover:bg-green-900/30',
+          'transition-all duration-200',
+          'bg-green-900/20'
         )}
       >
-        <div className="w-12 h-12 rounded-full bg-green-800/50 flex items-center justify-center mb-2">
-          <span className="text-2xl text-green-600">+</span>
-        </div>
-        <span className="text-green-600 text-sm">Otur</span>
+        <Plus className="w-5 h-5 text-green-500" />
       </button>
     );
   }
 
-  const status = statusLabels[player.status] || statusLabels.waiting;
   const timerPercent = (turnTimer / 15) * 100;
+  const borderColor = statusColors[player.status] || 'border-gray-500';
 
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center p-3 rounded-xl transition-all duration-300',
-        'bg-black/30 backdrop-blur-sm min-w-[130px]',
-        isActive && 'ring-2 ring-green-400 animate-pulse-glow',
-        player.status === 'disconnected' && 'opacity-50'
-      )}
-    >
-      {/* Timer bar (sadece aktif oyuncu için) */}
-      {isActive && (
-        <div className="w-full h-1.5 bg-gray-700 rounded-full mb-2 overflow-hidden">
-          <div
-            className={cn(
-              'h-full transition-all duration-1000 ease-linear rounded-full',
-              timerPercent > 50 ? 'bg-green-500' : timerPercent > 25 ? 'bg-yellow-500' : 'bg-red-500'
-            )}
-            style={{ width: `${timerPercent}%` }}
-          />
-        </div>
-      )}
-
-      {/* Kartlar */}
+    <div className="flex flex-col items-center gap-1">
+      {/* Kartlar - oyuncunun üstünde */}
       {player.cards.length > 0 && (
-        <div className="mb-2">
+        <div className="mb-1">
           <CardStack cards={player.cards} size="sm" />
         </div>
       )}
 
-      {/* Skor */}
+      {/* Skor badge */}
       {player.totalScore > 0 && (
         <div className={cn(
-          'px-3 py-1 rounded-full text-sm font-bold mb-2',
-          player.status === 'bust' ? 'bg-red-600' :
+          'px-2 py-0.5 rounded-full text-xs font-bold mb-1',
+          player.status === 'bust' ? 'bg-red-600 text-white' :
           player.status === 'blackjack' ? 'bg-yellow-500 text-black' :
-          'bg-green-600'
+          'bg-green-600 text-white'
         )}>
           {player.totalScore}
         </div>
       )}
 
-      {/* Avatar ve isim */}
-      <div className="flex items-center gap-2">
+      {/* Avatar - yuvarlak profil fotoğrafı */}
+      <div className="relative">
+        {/* Timer ring (sadece aktif oyuncu için) */}
+        {isActive && (
+          <svg className="absolute -inset-1 w-14 h-14 -rotate-90">
+            <circle
+              cx="28"
+              cy="28"
+              r="26"
+              fill="none"
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="3"
+            />
+            <circle
+              cx="28"
+              cy="28"
+              r="26"
+              fill="none"
+              stroke={timerPercent > 50 ? '#22c55e' : timerPercent > 25 ? '#eab308' : '#ef4444'}
+              strokeWidth="3"
+              strokeDasharray={`${2 * Math.PI * 26}`}
+              strokeDashoffset={`${2 * Math.PI * 26 * (1 - timerPercent / 100)}`}
+              className="transition-all duration-1000 ease-linear"
+            />
+          </svg>
+        )}
+
         <Avatar className={cn(
-          'w-10 h-10 border-2',
-          isActive ? 'border-green-400' : 'border-gray-600'
+          'w-12 h-12 border-2 transition-all',
+          borderColor,
+          isActive && 'ring-2 ring-green-400 ring-offset-2 ring-offset-transparent'
         )}>
           <AvatarImage src={player.avatar} alt={player.name} />
-          <AvatarFallback className="bg-gray-700 text-white">
+          <AvatarFallback className="bg-gray-700 text-white text-xs">
             {player.name.substring(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <div className="flex flex-col">
-          <span className="text-white font-medium text-sm truncate max-w-[80px]">
-            {player.isCurrentUser ? 'Sen' : player.name}
-          </span>
-          <span className={cn('text-xs', status.color)}>
-            {status.text}
-          </span>
-        </div>
       </div>
 
-      {/* Bet gösterimi */}
+      {/* İsim - sadece kısa */}
+      <span className="text-white text-xs font-medium truncate max-w-[60px]">
+        {player.isCurrentUser ? 'Sen' : player.name}
+      </span>
+
+      {/* Bahis miktarı - minimal */}
       {player.bet > 0 && (
-        <div className="mt-2">
-          <BetDisplay amount={player.bet} size="sm" />
+        <div className="flex items-center gap-1 bg-yellow-500/20 px-2 py-0.5 rounded-full">
+          <span className="text-yellow-400 text-xs font-bold">{player.bet}</span>
         </div>
       )}
     </div>
