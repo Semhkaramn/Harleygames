@@ -7,7 +7,7 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://harleygames.netlify.app';
 
 // Bot username (@ olmadan)
-const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'harleygames_bot';
+const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'HarleyBlackjackBot';
 
 // İzin verilen grup ID'leri (virgülle ayrılmış string olarak env'den alınır)
 // Boş bırakılırsa tüm gruplarda çalışır
