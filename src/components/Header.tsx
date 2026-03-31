@@ -1,7 +1,7 @@
 'use client';
 
 interface HeaderProps {
-  currentView: 'lobby' | 'game';
+  currentView: 'lobby' | 'game' | 'leaderboard';
   userChips?: number;
   userName?: string;
   userAvatar?: string;
