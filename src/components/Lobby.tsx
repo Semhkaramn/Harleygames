@@ -12,24 +12,23 @@ export function Lobby({ onJoinRoom, onCreateRoom }: LobbyProps) {
   const { rooms } = useRoomStore();
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
+    <div className="w-full">
       {/* Section Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h2 className="text-base font-bold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
             Aktif Odalar
           </h2>
-          <p className="text-gray-500 text-sm mt-1">Bir masaya katıl veya kendi masanı oluştur</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs text-gray-400">{rooms.length} oda aktif</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] text-gray-400">{rooms.length} oda</span>
         </div>
       </div>
 
       {/* Room list */}
       {rooms.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {rooms.map((room) => (
             <RoomCard
               key={room.id}
@@ -39,14 +38,14 @@ export function Lobby({ onJoinRoom, onCreateRoom }: LobbyProps) {
           ))}
         </div>
       ) : (
-        <div className="glass rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-4">🎰</div>
-          <h3 className="text-xl font-semibold text-white mb-2">Henüz aktif oda yok</h3>
-          <p className="text-gray-500 mb-6">İlk odayı sen oluştur ve arkadaşlarını davet et!</p>
+        <div className="glass rounded-xl p-6 text-center">
+          <div className="text-3xl mb-2">🎰</div>
+          <h3 className="text-sm font-semibold text-white mb-1">Henüz aktif oda yok</h3>
+          <p className="text-gray-500 text-xs mb-3">İlk odayı sen oluştur!</p>
           <button
             type="button"
             onClick={onCreateRoom}
-            className="btn-gold px-8 py-3"
+            className="btn-gold px-4 py-2 text-xs"
           >
             Oda Oluştur
           </button>
@@ -62,54 +61,53 @@ function RoomCard({ room, onJoin }: { room: Room; onJoin: () => void }) {
 
   return (
     <div
-      className={`glass rounded-2xl p-5 transition-all duration-300 ${
-        !isFull ? 'hover:bg-white/10 hover:border-amber-500/30 cursor-pointer' : 'opacity-60'
-      } border border-transparent`}
+      className={`glass rounded-xl p-3 transition-all ${
+        !isFull ? 'active:scale-[0.98] cursor-pointer' : 'opacity-60'
+      }`}
       onClick={!isFull ? onJoin : undefined}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           {/* Status indicator */}
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
+          <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center text-lg ${
             isPlaying ? 'bg-emerald-500/20' : 'bg-amber-500/20'
           }`}>
             {isPlaying ? '🎲' : '⏳'}
           </div>
 
-          <div>
-            <h3 className="text-white font-semibold text-lg">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-white font-medium text-sm truncate">
               {room.name}
             </h3>
-            <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+            <div className="flex items-center gap-2 text-[10px] text-gray-400">
               <span className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${isPlaying ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <span className={`w-1 h-1 rounded-full ${isPlaying ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                 {isPlaying ? 'Oyunda' : 'Bekliyor'}
               </span>
-              <span>Min: {room.minBet} 💰</span>
-              <span>Max: {room.maxBet} 💰</span>
+              <span>{room.minBet}-{room.maxBet}💰</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* Player count */}
           <div className="text-center">
-            <div className="flex -space-x-2 mb-1 justify-center">
-              {Array.from({ length: Math.min(room.players, 4) }).map((_, i) => (
+            <div className="flex -space-x-1.5">
+              {Array.from({ length: Math.min(room.players, 3) }).map((_, i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 border-2 border-[#0a0a0a] flex items-center justify-center text-sm"
+                  className="w-5 h-5 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 border border-[#0a0a0a] flex items-center justify-center text-[10px]"
                 >
-                  {['🎭', '🎪', '🃏', '👤'][i]}
+                  {['🎭', '🎪', '🃏'][i]}
                 </div>
               ))}
-              {room.players > 4 && (
-                <div className="w-8 h-8 rounded-full bg-gray-800 border-2 border-[#0a0a0a] flex items-center justify-center text-xs text-gray-400">
-                  +{room.players - 4}
+              {room.players > 3 && (
+                <div className="w-5 h-5 rounded-full bg-gray-800 border border-[#0a0a0a] flex items-center justify-center text-[8px] text-gray-400">
+                  +{room.players - 3}
                 </div>
               )}
             </div>
-            <span className="text-xs text-gray-500">
+            <span className="text-[9px] text-gray-500 mt-0.5 block">
               {room.players}/{room.maxPlayers}
             </span>
           </div>
@@ -122,7 +120,7 @@ function RoomCard({ room, onJoin }: { room: Room; onJoin: () => void }) {
               e.stopPropagation();
               if (!isFull) onJoin();
             }}
-            className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               isFull
                 ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
                 : 'btn-primary'
