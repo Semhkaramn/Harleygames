@@ -12,32 +12,31 @@ interface ResultsPanelProps {
   onLeave: () => void;
 }
 
-const statusConfig: Record<string, { text: string; colorClass: string; amountPrefix: string }> = {
-  won: { text: 'Kazandı!', colorClass: 'text-green-400', amountPrefix: '+' },
-  lost: { text: 'Kaybetti', colorClass: 'text-red-400', amountPrefix: '' },
-  push: { text: 'Berabere', colorClass: 'text-gray-400', amountPrefix: '' },
-  blackjack: { text: 'Blackjack!', colorClass: 'text-yellow-400', amountPrefix: '+' },
-  bust: { text: 'Bust!', colorClass: 'text-red-400', amountPrefix: '' },
-  spectating: { text: 'İzledi', colorClass: 'text-gray-500', amountPrefix: '' },
+const statusConfig: Record<string, { text: string; colorClass: string }> = {
+  won: { text: 'Kazandı', colorClass: 'text-green-400' },
+  lost: { text: 'Kaybetti', colorClass: 'text-red-400' },
+  push: { text: 'Berabere', colorClass: 'text-gray-400' },
+  blackjack: { text: 'BJ!', colorClass: 'text-yellow-400' },
+  bust: { text: 'Bust', colorClass: 'text-red-400' },
+  spectating: { text: 'İzledi', colorClass: 'text-gray-500' },
 };
 
 export function ResultsPanel({ players, dealerScore, onReady, onLeave }: ResultsPanelProps) {
-  // Sadece oyuna katılan oyuncuları göster
   const activePlayers = players.filter(p => p.bet > 0 || ['won', 'lost', 'push', 'blackjack', 'bust'].includes(p.status));
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-gradient-to-b from-gray-900 to-gray-950 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-gray-800">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-gray-900 rounded-xl p-4 max-w-sm w-full mx-4 border border-gray-800">
         {/* Header */}
-        <div className="text-center mb-6">
-          <div className="inline-block px-4 py-1 rounded-full bg-red-600/20 text-red-400 text-sm mb-2">
-            Krupiye: {dealerScore > 21 ? 'Bust!' : dealerScore}
+        <div className="text-center mb-4">
+          <div className="inline-block px-3 py-0.5 rounded-full bg-gray-800 text-gray-400 text-xs mb-2">
+            Krupiye: {dealerScore > 21 ? 'Bust' : dealerScore}
           </div>
-          <h2 className="text-2xl font-bold text-gold">Sonuçlar</h2>
+          <h2 className="text-lg font-bold text-white">Sonuçlar</h2>
         </div>
 
         {/* Results list */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
           {activePlayers.map((player) => {
             const config = statusConfig[player.status] || statusConfig.lost;
             let winAmount = 0;
@@ -50,23 +49,20 @@ export function ResultsPanel({ players, dealerScore, onReady, onLeave }: Results
             return (
               <div
                 key={player.id}
-                className={cn(
-                  'flex items-center justify-between p-3 rounded-xl',
-                  'bg-gray-800/50 border border-gray-700'
-                )}
+                className="flex items-center justify-between p-2 rounded-lg bg-gray-800/50"
               >
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10 border-2 border-gray-600">
+                <div className="flex items-center gap-2">
+                  <Avatar className="w-8 h-8 border border-gray-600">
                     <AvatarImage src={player.avatar} alt={player.name} />
-                    <AvatarFallback className="bg-gray-700">
+                    <AvatarFallback className="bg-gray-700 text-xs">
                       {player.name.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <div className="font-medium text-white">
+                    <div className="font-medium text-white text-sm">
                       {player.isCurrentUser ? 'Sen' : player.name}
                     </div>
-                    <div className={cn('text-sm', config.colorClass)}>
+                    <div className={cn('text-xs', config.colorClass)}>
                       {config.text}
                     </div>
                   </div>
@@ -74,7 +70,7 @@ export function ResultsPanel({ players, dealerScore, onReady, onLeave }: Results
 
                 {winAmount !== 0 && (
                   <div className={cn(
-                    'text-lg font-bold',
+                    'text-sm font-bold',
                     winAmount > 0 ? 'text-green-400' : 'text-red-400'
                   )}>
                     {winAmount > 0 ? '+' : ''}{winAmount}
@@ -86,22 +82,21 @@ export function ResultsPanel({ players, dealerScore, onReady, onLeave }: Results
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <Button
             onClick={onLeave}
             variant="outline"
+            size="sm"
             className="flex-1 bg-gray-800 border-gray-700 hover:bg-gray-700"
           >
-            Lobiye Dön
+            Lobi
           </Button>
           <Button
             onClick={onReady}
-            className={cn(
-              'flex-1 bg-gradient-to-r from-green-600 to-green-500',
-              'hover:from-green-500 hover:to-green-400'
-            )}
+            size="sm"
+            className="flex-1 bg-green-600 hover:bg-green-500"
           >
-            Hazırım
+            Devam
           </Button>
         </div>
       </div>
