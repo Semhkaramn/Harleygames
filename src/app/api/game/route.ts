@@ -160,6 +160,22 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Player ID and bet required' }, { status: 400 });
         }
 
+        // Minimum ve maksimum bahis kontrolü
+        if (bet < room.min_bet || bet > room.max_bet) {
+          return NextResponse.json({ error: `Bahis ${room.min_bet} ile ${room.max_bet} arasında olmalı` }, { status: 400 });
+        }
+
+        // Kullanıcının yeterli bakiyesi var mı kontrol et
+        const player = await sql`SELECT telegram_id FROM game_players WHERE id = ${player_id}`;
+        if (player.length === 0) {
+          return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        const user = await sql`SELECT chips FROM users WHERE telegram_id = ${player[0].telegram_id}`;
+        if (user.length === 0 || user[0].chips < bet) {
+          return NextResponse.json({ error: 'Yetersiz bakiye' }, { status: 400 });
+        }
+
         // Bahis koy
         await sql`
           UPDATE game_players
@@ -168,14 +184,11 @@ export async function POST(request: NextRequest) {
         `;
 
         // Kullanıcı bakiyesini düş
-        const player = await sql`SELECT telegram_id FROM game_players WHERE id = ${player_id}`;
-        if (player.length > 0) {
-          await sql`
-            UPDATE users
-            SET chips = chips - ${bet}
-            WHERE telegram_id = ${player[0].telegram_id}
-          `;
-        }
+        await sql`
+          UPDATE users
+          SET chips = chips - ${bet}
+          WHERE telegram_id = ${player[0].telegram_id} AND chips >= ${bet}
+        `;
 
         return NextResponse.json({ success: true });
       }
