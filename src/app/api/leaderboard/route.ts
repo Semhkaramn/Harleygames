@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLeaderboard, getUser } from '@/lib/db';
 
+interface LeaderboardUser {
+  telegram_id: number | bigint;
+  username: string | null;
+  first_name: string | null;
+  avatar: string | null;
+  chips: number;
+  total_wins: number;
+  total_games: number;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const limit = parseInt(request.nextUrl.searchParams.get('limit') || '10', 10);
@@ -19,7 +29,7 @@ export async function GET(request: NextRequest) {
       if (userData) {
         // Kullanıcının sıralamasını bul
         const index = leaderboard.findIndex(
-          (u: any) => u.telegram_id.toString() === telegramId
+          (u: { telegram_id: number | bigint }) => u.telegram_id.toString() === telegramId
         );
 
         if (index !== -1) {
@@ -32,7 +42,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      leaderboard: leaderboard.map((user: any, index: number) => ({
+      leaderboard: leaderboard.map((user: LeaderboardUser, index: number) => ({
         rank: index + 1,
         telegram_id: user.telegram_id,
         username: user.username,
