@@ -55,7 +55,7 @@ export function PlayingCard({ card, index = 0, size = 'md', animate = true, flip
       scale: 1,
       opacity: 1,
       transition: {
-        type: 'spring',
+        type: 'spring' as const,
         stiffness: 200,
         damping: 20,
         delay: index * 0.15,
@@ -66,11 +66,11 @@ export function PlayingCard({ card, index = 0, size = 'md', animate = true, flip
   const flipVariants = {
     front: {
       rotateY: 0,
-      transition: { duration: 0.3, ease: 'easeOut' },
+      transition: { duration: 0.3, ease: 'easeOut' as const },
     },
     back: {
       rotateY: 180,
-      transition: { duration: 0.3, ease: 'easeOut' },
+      transition: { duration: 0.3, ease: 'easeOut' as const },
     },
   };
 
