@@ -182,7 +182,6 @@ export default function Home() {
     }
 
     try {
-      // Önce odadaki boş koltukları kontrol et
       const roomResponse = await fetch(`/api/rooms?id=${roomId}`);
       const roomData = await roomResponse.json();
 
@@ -191,10 +190,8 @@ export default function Home() {
         return;
       }
 
-      // Dolu koltukları bul
       const occupiedSeats = (roomData.room.players || []).map((p: { seat_number: number }) => p.seat_number);
 
-      // İlk boş koltuğu bul (1-6 arası)
       let availableSeat = -1;
       for (let i = 1; i <= 6; i++) {
         if (!occupiedSeats.includes(i)) {
@@ -277,15 +274,14 @@ export default function Home() {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
         <div className="text-center">
-          <div className="w-24 h-24 mx-auto mb-8 relative">
-            <div className="absolute inset-0 rounded-full border-4 border-amber-500/20" />
-            <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
-            <div className="absolute inset-3 rounded-full bg-gradient-to-br from-amber-500/30 to-transparent animate-pulse" />
+          <div className="w-16 h-16 mx-auto mb-4 relative">
+            <div className="absolute inset-0 rounded-full border-3 border-amber-500/20" />
+            <div className="absolute inset-0 rounded-full border-3 border-amber-500 border-t-transparent animate-spin" />
           </div>
-          <h2 className="text-3xl font-bold gold-text mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h2 className="text-xl font-bold gold-text mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
             HARLEY GAMES
           </h2>
-          <p className="text-gray-500 animate-pulse text-sm">Yükleniyor...</p>
+          <p className="text-gray-500 animate-pulse text-xs">Yükleniyor...</p>
         </div>
       </main>
     );
@@ -295,17 +291,17 @@ export default function Home() {
   if (authError) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-4">
-        <div className="text-center max-w-md">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-red-500/20 flex items-center justify-center">
-            <span className="text-4xl">🚫</span>
+        <div className="text-center max-w-xs">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+            <span className="text-2xl">🚫</span>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h2 className="text-lg font-bold text-white mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
             Erişim Hatası
           </h2>
-          <p className="text-gray-400 mb-6">{authError}</p>
-          <div className="glass rounded-xl p-4">
-            <p className="text-sm text-gray-500 mb-3">Telegram'da oynamak için:</p>
-            <ol className="text-left text-sm text-gray-400 space-y-2">
+          <p className="text-gray-400 text-sm mb-4">{authError}</p>
+          <div className="glass rounded-xl p-3">
+            <p className="text-xs text-gray-500 mb-2">Telegram'da oynamak için:</p>
+            <ol className="text-left text-xs text-gray-400 space-y-1.5">
               <li className="flex items-start gap-2">
                 <span className="text-amber-500">1.</span>
                 <span>Telegram'ı açın</span>
@@ -330,46 +326,46 @@ export default function Home() {
       {/* Notification */}
       {notification && (
         <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-2xl animate-slide-down backdrop-blur-lg ${
+          className={`fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-xl animate-slide-down backdrop-blur-lg text-xs ${
             notification.type === 'success' ? 'bg-emerald-500/90 border border-emerald-400/30' :
             notification.type === 'error' ? 'bg-red-500/90 border border-red-400/30' :
             'bg-amber-500/90 border border-amber-400/30'
           }`}
         >
-          <p className="text-white font-medium text-sm">{notification.message}</p>
+          <p className="text-white font-medium">{notification.message}</p>
         </div>
       )}
 
       {/* Bonus Modal */}
       {showBonusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="glass rounded-2xl p-6 max-w-sm w-[90%] animate-slide-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="glass rounded-xl p-4 max-w-xs w-full animate-slide-up">
             <div className="text-center">
-              <div className="text-5xl mb-4">🎁</div>
-              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
+              <div className="text-4xl mb-3">🎁</div>
+              <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
                 Günlük Bonus
               </h3>
 
               {bonusStatus?.available ? (
                 <>
-                  <p className="text-gray-400 mb-4">1000 chip bonus seni bekliyor!</p>
+                  <p className="text-gray-400 text-sm mb-3">1000 chip bonus seni bekliyor!</p>
                   <button
                     type="button"
                     onClick={claimBonus}
-                    className="btn-gold px-8 py-3 w-full"
+                    className="btn-gold px-6 py-2 w-full text-sm"
                   >
                     Bonus Al
                   </button>
                 </>
               ) : (
                 <>
-                  <p className="text-gray-400 mb-4">
+                  <p className="text-gray-400 text-sm mb-3">
                     Sonraki bonus: {bonusStatus?.remaining_hours || 24} saat sonra
                   </p>
                   <button
                     type="button"
                     onClick={() => setShowBonusModal(false)}
-                    className="btn-secondary px-8 py-3 w-full"
+                    className="btn-secondary px-6 py-2 w-full text-sm"
                   >
                     Tamam
                   </button>
@@ -379,7 +375,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setShowBonusModal(false)}
-                className="mt-3 text-gray-500 text-sm hover:text-white transition-colors"
+                className="mt-2 text-gray-500 text-xs hover:text-white transition-colors"
               >
                 Kapat
               </button>
@@ -396,63 +392,62 @@ export default function Home() {
         onBack={currentView !== 'lobby' ? handleBackToLobby : undefined}
       />
 
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="px-3 py-3">
         {currentView === 'lobby' && (
           <div className="animate-fade-in">
-            {/* Hero Section */}
-            <div className="text-center mb-10">
-              <h1 className="text-4xl md:text-6xl font-bold mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
+            {/* Hero Section - Kompakt */}
+            <div className="text-center mb-4">
+              <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>
                 <span className="gold-text">HARLEY GAMES</span>
               </h1>
-              <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
-                Telegram'da Blackjack oyna, arkadaşlarınla yarış
+              <p className="text-gray-500 text-xs">
+                Blackjack oyna, arkadaşlarınla yarış
               </p>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
-                <div className="text-3xl mb-2">💰</div>
-                <div className="text-2xl font-bold text-white">{(dbUser?.chips || 0).toLocaleString()}</div>
-                <div className="text-xs text-gray-500 mt-1">Bakiye</div>
+            {/* Stats Cards - 2x2 Grid Kompakt */}
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="glass rounded-xl p-2 text-center">
+                <div className="text-lg mb-0.5">💰</div>
+                <div className="text-sm font-bold text-white">{(dbUser?.chips || 0).toLocaleString()}</div>
+                <div className="text-[9px] text-gray-500">Bakiye</div>
               </div>
-              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
-                <div className="text-3xl mb-2">🏆</div>
-                <div className="text-2xl font-bold text-emerald-400">{dbUser?.total_wins || 0}</div>
-                <div className="text-xs text-gray-500 mt-1">Kazanılan</div>
+              <div className="glass rounded-xl p-2 text-center">
+                <div className="text-lg mb-0.5">🏆</div>
+                <div className="text-sm font-bold text-emerald-400">{dbUser?.total_wins || 0}</div>
+                <div className="text-[9px] text-gray-500">Kazanılan</div>
               </div>
-              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
-                <div className="text-3xl mb-2">🎲</div>
-                <div className="text-2xl font-bold text-white">{dbUser?.total_games || 0}</div>
-                <div className="text-xs text-gray-500 mt-1">Toplam Oyun</div>
+              <div className="glass rounded-xl p-2 text-center">
+                <div className="text-lg mb-0.5">🎲</div>
+                <div className="text-sm font-bold text-white">{dbUser?.total_games || 0}</div>
+                <div className="text-[9px] text-gray-500">Oyun</div>
               </div>
-              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform cursor-pointer" onClick={() => setShowBonusModal(true)}>
-                <div className="text-3xl mb-2">🎁</div>
-                <div className={`text-2xl font-bold ${bonusStatus?.available ? 'text-amber-400 animate-pulse' : 'text-gray-500'}`}>
-                  {bonusStatus?.available ? 'Hazır!' : `${bonusStatus?.remaining_hours || '?'}s`}
+              <div className="glass rounded-xl p-2 text-center cursor-pointer active:scale-95 transition-transform" onClick={() => setShowBonusModal(true)}>
+                <div className="text-lg mb-0.5">🎁</div>
+                <div className={`text-sm font-bold ${bonusStatus?.available ? 'text-amber-400' : 'text-gray-500'}`}>
+                  {bonusStatus?.available ? '!' : `${bonusStatus?.remaining_hours || '?'}s`}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">Bonus</div>
+                <div className="text-[9px] text-gray-500">Bonus</div>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {/* Action Buttons - Tek Satır */}
+            <div className="flex gap-2 mb-4">
               <button
                 type="button"
                 onClick={handleCreateRoom}
                 disabled={!dbUser}
-                className="btn-gold text-lg px-10 py-4 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-gold flex-1 text-sm py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <span className="text-xl">+</span>
-                Yeni Oda Oluştur
+                <span>+</span>
+                Oda Oluştur
               </button>
               <button
                 type="button"
                 onClick={() => setCurrentView('leaderboard')}
-                className="btn-secondary text-lg px-8 py-4 flex items-center gap-2"
+                className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-1"
               >
-                <span className="text-xl">🏆</span>
-                Liderlik Tablosu
+                <span>🏆</span>
               </button>
             </div>
 
