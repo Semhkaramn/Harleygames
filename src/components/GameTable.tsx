@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { type Player, type Card, calculateHandValue, isBlackjack, createDeck } from '@/lib/gameTypes';
+import { type Player, type Card, calculateHandValue, isBlackjack } from '@/lib/gameTypes';
 import { useUserStore, useUIStore } from '@/lib/store';
 import { PlayingCard } from './PlayingCard';
 import { PlayerSeat } from './PlayerSeat';
@@ -9,7 +9,7 @@ import { Chip } from './Chip';
 import { hapticFeedback } from '@/lib/telegram';
 
 interface GameTableProps {
-  roomId: string | null;
+  roomId: string;
   onBack: () => void;
 }
 
@@ -22,8 +22,6 @@ const SEAT_POSITIONS = [
   { x: '90%', y: '70%' },
   { x: '50%', y: '55%' },
 ];
-
-const MIN_DECK_CARDS = 15;
 
 interface ServerGameState {
   id: number;
@@ -47,19 +45,11 @@ interface ServerGameState {
 }
 
 export function GameTable({ roomId, onBack }: GameTableProps) {
-  const { dbUser, updateChips, setDbUser } = useUserStore();
+  const { dbUser, setDbUser } = useUserStore();
   const { showNotification } = useUIStore();
 
   // Server game state
   const [serverGame, setServerGame] = useState<ServerGameState | null>(null);
-  const [isServerMode, setIsServerMode] = useState(!!roomId);
-
-  // Local game state (for demo mode when no roomId)
-  const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
-  const [localDealer, setLocalDealer] = useState<{ cards: Card[]; score: number }>({ cards: [], score: 0 });
-  const [localDeck, setLocalDeck] = useState<Card[]>([]);
-  const [localStatus, setLocalStatus] = useState<'waiting' | 'betting' | 'dealing' | 'playing' | 'dealer-turn' | 'results'>('waiting');
-  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
   const [myGamePlayerId, setMyGamePlayerId] = useState<string | null>(null);
 
   const [selectedBet, setSelectedBet] = useState(0);
@@ -152,9 +142,9 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   }, [roomId, dbUser, triggerDealerPlay]);
 
-  // Start polling for server mode
+  // Start polling for game state
   useEffect(() => {
-    if (isServerMode && roomId) {
+    if (roomId) {
       fetchGameState();
       pollingRef.current = setInterval(fetchGameState, 2000);
 
@@ -164,32 +154,9 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         }
       };
     }
-  }, [isServerMode, roomId, fetchGameState]);
+  }, [roomId, fetchGameState]);
 
-  // Initialize local game for demo mode
-  useEffect(() => {
-    if (!roomId && dbUser && !isServerMode) {
-      const player: Player = {
-        id: `player-${dbUser.telegram_id}`,
-        name: dbUser.first_name || 'Oyuncu',
-        avatar: dbUser.avatar || '🎭',
-        chips: dbUser.chips,
-        bet: 0,
-        cards: [],
-        isActive: true,
-        isTurn: false,
-        status: 'waiting',
-        seatNumber: 1,
-      };
-      setLocalPlayers([player]);
-      setMyPlayerId(player.id);
-      setLocalDeck(createDeck());
-      setLocalStatus('betting');
-      setShowBetPanel(true);
-    }
-  }, [roomId, dbUser, isServerMode]);
-
-  // Handle joining a seat (server mode)
+  // Handle joining a seat
   const handleJoinSeat = async (seatNumber: number) => {
     if (!dbUser || !roomId) return;
 
@@ -221,8 +188,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle placing bet (server mode)
-  const handleServerBet = async () => {
+  // Handle placing bet
+  const handleBet = async () => {
     if (!myGamePlayerId || !roomId || selectedBet === 0 || isProcessing) return;
 
     setIsProcessing(true);
@@ -246,7 +213,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         await refreshUserData();
         hapticFeedback('success');
 
-        // Auto deal after bet (single player mode)
+        // Auto deal after bet
         setTimeout(async () => {
           await handleDeal();
         }, 500);
@@ -260,7 +227,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle deal cards (server mode)
+  // Handle deal cards
   const handleDeal = async () => {
     if (!roomId || isProcessing) return;
 
@@ -287,8 +254,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle hit (server mode)
-  const handleServerHit = async () => {
+  // Handle hit
+  const handleHit = async () => {
     if (!myGamePlayerId || !roomId || isProcessing) return;
 
     setIsProcessing(true);
@@ -321,8 +288,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle stand (server mode)
-  const handleServerStand = async () => {
+  // Handle stand
+  const handleStand = async () => {
     if (!myGamePlayerId || !roomId || isProcessing) return;
 
     setIsProcessing(true);
@@ -351,8 +318,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle double down (server mode)
-  const handleServerDouble = async () => {
+  // Handle double down
+  const handleDouble = async () => {
     if (!myGamePlayerId || !roomId || isProcessing) return;
 
     setIsProcessing(true);
@@ -386,8 +353,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Start new game (server mode)
-  const handleNewServerGame = async () => {
+  // Start new game
+  const handleNewGame = async () => {
     if (!roomId || isProcessing) return;
 
     setIsProcessing(true);
@@ -414,61 +381,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // =====================
-  // LOCAL MODE FUNCTIONS
-  // =====================
-
-  const ensureDeckHasCards = useCallback((deck: Card[]): Card[] => {
-    if (deck.length < MIN_DECK_CARDS) {
-      const newDeck = createDeck();
-      return [...newDeck, ...deck];
-    }
-    return deck;
-  }, []);
-
-  const handleSeatClick = (seatNumber: number) => {
-    if (isServerMode && roomId) {
-      handleJoinSeat(seatNumber);
-      return;
-    }
-
-    if (!dbUser) {
-      showNotification('error', 'Giriş yapmanız gerekiyor');
-      return;
-    }
-
-    if (localPlayers.find(p => p.seatNumber === seatNumber)) {
-      showNotification('error', 'Bu koltuk dolu');
-      return;
-    }
-
-    const player: Player = {
-      id: `player-${dbUser.telegram_id}`,
-      name: dbUser.first_name || 'Oyuncu',
-      avatar: dbUser.avatar || '🎭',
-      chips: dbUser.chips,
-      bet: 0,
-      cards: [],
-      isActive: true,
-      isTurn: false,
-      status: 'waiting',
-      seatNumber,
-    };
-
-    setLocalPlayers(prev => [...prev, player]);
-    setMyPlayerId(player.id);
-    hapticFeedback('medium');
-
-    if (localStatus === 'waiting') {
-      setLocalStatus('betting');
-      setShowBetPanel(true);
-    }
-  };
-
   const handleChipClick = (value: number) => {
-    const availableChips = isServerMode
-      ? (dbUser?.chips || 0)
-      : (localPlayers.find(p => p.id === myPlayerId)?.chips || 0);
+    const availableChips = dbUser?.chips || 0;
 
     if (availableChips >= selectedBet + value) {
       setSelectedBet((prev) => prev + value);
@@ -480,253 +394,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     setSelectedBet(0);
   };
 
-  const handleConfirmBet = () => {
-    if (isServerMode) {
-      handleServerBet();
-      return;
-    }
-
-    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
-    if (!currentPlayer || selectedBet === 0 || isProcessing) return;
-
-    if (currentPlayer.chips < selectedBet) {
-      showNotification('error', 'Yetersiz bakiye');
-      return;
-    }
-
-    setIsProcessing(true);
-
-    setLocalPlayers(prev => prev.map(p =>
-      p.id === myPlayerId
-        ? { ...p, bet: selectedBet, chips: p.chips - selectedBet, status: 'playing' }
-        : p
-    ));
-
-    setSelectedBet(0);
-    setShowBetPanel(false);
-    hapticFeedback('success');
-
-    setTimeout(() => {
-      dealLocalCards();
-      setIsProcessing(false);
-    }, 500);
-  };
-
-  const dealLocalCards = () => {
-    const deck = ensureDeckHasCards([...localDeck]);
-    const players = localPlayers.filter(p => p.bet > 0);
-
-    if (players.length === 0) return;
-
-    const updatedPlayers = localPlayers.map(player => {
-      if (player.bet > 0) {
-        const card1 = deck.pop()!;
-        const card2 = deck.pop()!;
-        return { ...player, cards: [card1, card2] };
-      }
-      return player;
-    });
-
-    const dealerCard1 = { ...deck.pop()!, faceUp: true };
-    const dealerCard2 = { ...deck.pop()!, faceUp: false };
-
-    setLocalPlayers(updatedPlayers);
-    setLocalDealer({ cards: [dealerCard1, dealerCard2], score: calculateHandValue([dealerCard1]) });
-    setLocalDeck(deck);
-    setLocalStatus('playing');
-
-    const firstPlayer = updatedPlayers.find(p => p.bet > 0);
-    if (firstPlayer) {
-      setLocalPlayers(prev => prev.map(p => ({
-        ...p,
-        isTurn: p.id === firstPlayer.id
-      })));
-    }
-  };
-
-  const handleLocalHit = () => {
-    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
-    if (!currentPlayer || localStatus !== 'playing' || isProcessing) return;
-
-    setIsProcessing(true);
-    const deck = ensureDeckHasCards([...localDeck]);
-    const newCard = deck.pop()!;
-
-    const updatedPlayers = localPlayers.map(player => {
-      if (player.id === myPlayerId) {
-        const newCards = [...player.cards, newCard];
-        const handValue = calculateHandValue(newCards);
-        let status = player.status;
-
-        if (handValue > 21) {
-          status = 'bust';
-        } else if (handValue === 21) {
-          status = 'stand';
-        }
-
-        return { ...player, cards: newCards, status };
-      }
-      return player;
-    });
-
-    setLocalPlayers(updatedPlayers);
-    setLocalDeck(deck);
-    hapticFeedback('medium');
-
-    const updatedPlayer = updatedPlayers.find(p => p.id === myPlayerId);
-    if (updatedPlayer?.status === 'bust' || updatedPlayer?.status === 'stand') {
-      moveToNextLocalPlayer(updatedPlayers);
-    }
-
-    setIsProcessing(false);
-  };
-
-  const handleLocalStand = () => {
-    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
-    if (!currentPlayer || isProcessing) return;
-
-    setIsProcessing(true);
-
-    const updatedPlayers = localPlayers.map(p =>
-      p.id === myPlayerId ? { ...p, status: 'stand' as const, isTurn: false } : p
-    );
-
-    setLocalPlayers(updatedPlayers);
-    hapticFeedback('light');
-    moveToNextLocalPlayer(updatedPlayers);
-
-    setIsProcessing(false);
-  };
-
-  const handleLocalDouble = () => {
-    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
-    if (!currentPlayer || isProcessing) return;
-
-    if (currentPlayer.chips < currentPlayer.bet) {
-      showNotification('error', 'Katlamak için yeterli bakiye yok');
-      return;
-    }
-
-    setIsProcessing(true);
-
-    const deck = ensureDeckHasCards([...localDeck]);
-    const newCard = deck.pop()!;
-
-    const updatedPlayers = localPlayers.map(player => {
-      if (player.id === myPlayerId) {
-        const newCards = [...player.cards, newCard];
-        const handValue = calculateHandValue(newCards);
-        const newBet = player.bet * 2;
-        const newChips = player.chips - player.bet;
-
-        return {
-          ...player,
-          cards: newCards,
-          bet: newBet,
-          chips: newChips,
-          status: handValue > 21 ? 'bust' as const : 'stand' as const,
-          isTurn: false,
-        };
-      }
-      return player;
-    });
-
-    setLocalPlayers(updatedPlayers);
-    setLocalDeck(deck);
-    hapticFeedback('success');
-    moveToNextLocalPlayer(updatedPlayers);
-
-    setIsProcessing(false);
-  };
-
-  const moveToNextLocalPlayer = (players: Player[]) => {
-    const playingPlayers = players.filter(p => p.status === 'playing');
-
-    if (playingPlayers.length > 0) {
-      setLocalPlayers(prev => prev.map(p => ({
-        ...p,
-        isTurn: p.id === playingPlayers[0].id
-      })));
-    } else {
-      setLocalStatus('dealer-turn');
-      setTimeout(() => localDealerPlay(), 1000);
-    }
-  };
-
-  const localDealerPlay = () => {
-    const deck = ensureDeckHasCards([...localDeck]);
-    let dealerCards = localDealer.cards.map(c => ({ ...c, faceUp: true }));
-    let dealerScore = calculateHandValue(dealerCards);
-
-    while (dealerScore < 17) {
-      const newCard = { ...deck.pop()!, faceUp: true };
-      dealerCards = [...dealerCards, newCard];
-      dealerScore = calculateHandValue(dealerCards);
-    }
-
-    const dealerHasBlackjackLocal = isBlackjack(dealerCards);
-
-    const updatedPlayers = localPlayers.map(player => {
-      if (player.status === 'bust') {
-        return { ...player, status: 'lose' as const };
-      }
-
-      const playerScore = calculateHandValue(player.cards);
-      const playerHasBlackjack = isBlackjack(player.cards);
-
-      if (playerHasBlackjack && !dealerHasBlackjackLocal) {
-        return {
-          ...player,
-          status: 'blackjack' as const,
-          chips: player.chips + Math.floor(player.bet * 2.5),
-        };
-      }
-
-      if (dealerScore > 21) {
-        return {
-          ...player,
-          status: 'win' as const,
-          chips: player.chips + player.bet * 2,
-        };
-      }
-
-      if (playerScore > dealerScore) {
-        return {
-          ...player,
-          status: 'win' as const,
-          chips: player.chips + player.bet * 2,
-        };
-      }
-
-      if (playerScore === dealerScore) {
-        return {
-          ...player,
-          status: 'push' as const,
-          chips: player.chips + player.bet,
-        };
-      }
-
-      return { ...player, status: 'lose' as const };
-    });
-
-    setLocalDealer({ cards: dealerCards, score: dealerScore });
-    setLocalPlayers(updatedPlayers);
-    setLocalDeck(deck);
-    setLocalStatus('results');
-    hapticFeedback('success');
-
-    // Sync chips with server
-    if (dbUser) {
-      const myPlayer = updatedPlayers.find(p => p.id === myPlayerId);
-      const originalPlayer = localPlayers.find(p => p.id === myPlayerId);
-      if (myPlayer && originalPlayer) {
-        const chipChange = myPlayer.chips - originalPlayer.chips;
-        updateChips(chipChange);
-      }
-    }
-  };
-
-  const getResultDisplay = (player: Player | { status: string; bet: number }): { text: string; color: string } => {
+  const getResultDisplay = (player: { status: string; bet: number }): { text: string; color: string } => {
     switch (player.status) {
       case 'win':
         return { text: `+${player.bet}`, color: 'text-green-400' };
@@ -742,51 +410,27 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  const handleNewGame = () => {
-    if (isServerMode) {
-      handleNewServerGame();
-      return;
-    }
+  // Determine current state
+  const gameStatus = serverGame?.status || 'waiting';
+  const gamePlayers: Player[] = serverGame?.players?.map(p => ({
+    id: p.id,
+    name: p.name,
+    avatar: p.avatar,
+    chips: dbUser?.telegram_id === p.telegramId ? (dbUser?.chips || 0) : 0,
+    bet: p.bet,
+    cards: p.cards || [],
+    isActive: true,
+    isTurn: p.isTurn,
+    status: p.status as Player['status'],
+    seatNumber: p.seatNumber,
+  })) || [];
 
-    setLocalPlayers(prev => prev.map(p => ({
-      ...p,
-      cards: [],
-      bet: 0,
-      status: 'waiting',
-      isTurn: false,
-    })));
-    setLocalDealer({ cards: [], score: 0 });
-    setLocalDeck(createDeck());
-    setLocalStatus('betting');
-    setShowBetPanel(true);
-    hapticFeedback('medium');
+  const gameDealer = {
+    cards: serverGame?.dealer_cards || [],
+    score: serverGame?.dealer_score || 0,
   };
 
-  // Determine current state based on mode
-  const gameStatus = isServerMode ? (serverGame?.status || 'waiting') : localStatus;
-  const gamePlayers = isServerMode
-    ? (serverGame?.players?.map(p => ({
-        id: p.id,
-        name: p.name,
-        avatar: p.avatar,
-        chips: dbUser?.telegram_id === p.telegramId ? (dbUser?.chips || 0) : 0,
-        bet: p.bet,
-        cards: p.cards || [],
-        isActive: true,
-        isTurn: p.isTurn,
-        status: p.status as Player['status'],
-        seatNumber: p.seatNumber,
-      })) || [])
-    : localPlayers;
-
-  const gameDealer = isServerMode
-    ? { cards: serverGame?.dealer_cards || [], score: serverGame?.dealer_score || 0 }
-    : localDealer;
-
-  const currentPlayer = isServerMode
-    ? gamePlayers.find(p => p.id === myGamePlayerId)
-    : gamePlayers.find(p => p.id === myPlayerId);
-
+  const currentPlayer = gamePlayers.find(p => p.id === myGamePlayerId);
   const isPlayerTurn = currentPlayer?.isTurn && gameStatus === 'playing';
   const canHit = isPlayerTurn && currentPlayer?.status === 'playing' && !isProcessing;
   const canStand = canHit;
@@ -794,11 +438,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
   const dealerScore = calculateHandValue(gameDealer.cards);
   const dealerHasBlackjack = isBlackjack(gameDealer.cards);
-
-  // Event handlers based on mode
-  const handleHit = isServerMode ? handleServerHit : handleLocalHit;
-  const handleStand = isServerMode ? handleServerStand : handleLocalStand;
-  const handleDouble = isServerMode ? handleServerDouble : handleLocalDouble;
 
   return (
     <div className="relative w-full h-[550px] md:h-[650px] lg:h-[700px] overflow-hidden">
@@ -855,9 +494,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       {/* Player Seats */}
       {SEAT_POSITIONS.map((position, index) => {
         const player = gamePlayers.find((p) => p.seatNumber === index + 1);
-        const isMyPlayer = isServerMode
-          ? player?.id === myGamePlayerId
-          : player?.id === myPlayerId;
+        const isMyPlayer = player?.id === myGamePlayerId;
 
         return (
           <PlayerSeat
@@ -865,7 +502,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             player={player}
             seatNumber={index + 1}
             isCurrentUser={isMyPlayer}
-            onSeatClick={() => handleSeatClick(index + 1)}
+            onSeatClick={() => handleJoinSeat(index + 1)}
             position={position}
           />
         );
@@ -904,7 +541,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             </button>
             <button
               type="button"
-              onClick={handleConfirmBet}
+              onClick={handleBet}
               disabled={selectedBet === 0 || isProcessing}
               className="btn-gold text-xs px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -995,7 +632,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
              gameStatus === 'dealer-turn' ? 'Krupiye' :
              'Sonuçlar'}
           </span>
-          {isServerMode && <span className="text-[8px] text-green-400 ml-1">● CANLI</span>}
+          <span className="text-[8px] text-green-400 ml-1">● CANLI</span>
         </div>
       </div>
 
@@ -1010,15 +647,13 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         </div>
       )}
 
-      {/* Room ID display for multiplayer */}
-      {roomId && (
-        <div className="absolute bottom-3 left-3 glass rounded-lg px-2.5 py-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-gray-400">Oda:</span>
-            <span className="text-[10px] text-amber-400 font-mono">{roomId}</span>
-          </div>
+      {/* Room ID display */}
+      <div className="absolute bottom-3 left-3 glass rounded-lg px-2.5 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-400">Oda:</span>
+          <span className="text-[10px] text-amber-400 font-mono">{roomId}</span>
         </div>
-      )}
+      </div>
     </div>
   );
 }
