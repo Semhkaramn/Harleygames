@@ -71,12 +71,18 @@
 
 ## 🎯 ÖNCELİK SIRASI
 
-1. **YÜKSEK**: UI/UX animasyonları ve efektler
+1. **en son bu**: UI/UX animasyonları ve efektler
 2. **ORTA**: SSE gerçek zamanlı güncelleme
 3. **DÜŞÜK**: Turnuva sistemi tamamlama
 
 ---
+Kullanıcı local demo mode'u tamamen kaldırmak istiyor ve veritabanı bağlantısının her zaman var olduğunu söylüyor. Bu durumda:
 
+page.tsx'den getMockUser() ve ilgili kodları kaldır
+GameTable'daki local mode kodlarını kaldır
+Telegram dışında çalışma durumunda hata mesajı göster
+Todo'yu güncelle
+Hadi başlayalım.
 ## 🔧 KURULUM
 
 ```bash
