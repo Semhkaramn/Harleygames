@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { createDeck, calculateHandValue, isBlackjack, type Card } from '@/lib/gameTypes';
 
+// Minimum kart sayısı - bu altına düşerse deste yenilenir
+const MIN_DECK_CARDS = 15;
+
 // Oyun durumunu getir
 export async function GET(request: NextRequest) {
   try {
@@ -57,6 +60,16 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Deck'i kontrol et ve gerekirse yenile
+function ensureDeckHasCards(deck: Card[]): Card[] {
+  if (deck.length < MIN_DECK_CARDS) {
+    // Yeni deste oluştur ve mevcut kartları ekle
+    const newDeck = createDeck();
+    return [...newDeck, ...deck];
+  }
+  return deck;
+}
+
 // Yeni oyun başlat
 export async function POST(request: NextRequest) {
   try {
@@ -108,6 +121,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Telegram ID and seat number required' }, { status: 400 });
         }
 
+        // Seat number validation
+        if (seat_number < 1 || seat_number > 6) {
+          return NextResponse.json({ error: 'Invalid seat number' }, { status: 400 });
+        }
+
         // Aktif oyunu bul
         const games = await sql`
           SELECT * FROM games
@@ -140,16 +158,36 @@ export async function POST(request: NextRequest) {
 
         const game = games[0];
 
+        // Koltuğun boş olup olmadığını kontrol et (Race condition fix)
+        const existingSeat = await sql`
+          SELECT id FROM game_players
+          WHERE game_id = ${game.id} AND seat_number = ${seat_number}
+          FOR UPDATE
+        `;
+
+        if (existingSeat.length > 0) {
+          return NextResponse.json({ error: 'Bu koltuk dolu' }, { status: 400 });
+        }
+
         // Oyuncuyu ekle
         const user = await sql`SELECT id FROM users WHERE telegram_id = ${telegram_id}`;
         if (user.length === 0) {
           return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
+        // Oyuncunun zaten oyunda olup olmadığını kontrol et
+        const existingPlayer = await sql`
+          SELECT id FROM game_players
+          WHERE game_id = ${game.id} AND telegram_id = ${telegram_id}
+        `;
+
+        if (existingPlayer.length > 0) {
+          return NextResponse.json({ error: 'Zaten bu oyundasınız' }, { status: 400 });
+        }
+
         await sql`
           INSERT INTO game_players (game_id, user_id, telegram_id, seat_number)
           VALUES (${game.id}, ${user[0].id}, ${telegram_id}, ${seat_number})
-          ON CONFLICT DO NOTHING
         `;
 
         return NextResponse.json({ success: true, game_id: game.id });
@@ -158,6 +196,11 @@ export async function POST(request: NextRequest) {
       case 'bet': {
         if (!player_id || !bet) {
           return NextResponse.json({ error: 'Player ID and bet required' }, { status: 400 });
+        }
+
+        // Bahis validation
+        if (bet <= 0) {
+          return NextResponse.json({ error: 'Bahis pozitif olmalı' }, { status: 400 });
         }
 
         // Minimum ve maksimum bahis kontrolü
@@ -207,7 +250,7 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        const deck: Card[] = game.deck as Card[];
+        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
 
         // Bahis koyan oyuncuları al
         const players = await sql`
@@ -275,7 +318,7 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        const deck: Card[] = game.deck as Card[];
+        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
 
         // Oyuncuyu bul
         const players = await sql`
@@ -287,6 +330,12 @@ export async function POST(request: NextRequest) {
         }
 
         const player = players[0];
+
+        // Sıranın bu oyuncuda olup olmadığını kontrol et
+        if (!player.is_turn) {
+          return NextResponse.json({ error: 'Sıra sizde değil' }, { status: 400 });
+        }
+
         const cards: Card[] = player.cards as Card[];
         const newCard = deck.pop()!;
         cards.push(newCard);
@@ -326,6 +375,19 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Player ID required' }, { status: 400 });
         }
 
+        // Oyuncunun sırasında olup olmadığını kontrol et
+        const playerCheck = await sql`
+          SELECT is_turn FROM game_players WHERE id = ${player_id}
+        `;
+
+        if (playerCheck.length === 0) {
+          return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        if (!playerCheck[0].is_turn) {
+          return NextResponse.json({ error: 'Sıra sizde değil' }, { status: 400 });
+        }
+
         // Oyuncuyu stand yap
         await sql`
           UPDATE game_players
@@ -348,6 +410,95 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      case 'double_down': {
+        if (!player_id) {
+          return NextResponse.json({ error: 'Player ID required' }, { status: 400 });
+        }
+
+        // Aktif oyunu bul
+        const games = await sql`
+          SELECT * FROM games
+          WHERE room_id = ${room_id} AND status = 'playing'
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+
+        if (games.length === 0) {
+          return NextResponse.json({ error: 'No active game' }, { status: 400 });
+        }
+
+        const game = games[0];
+        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
+
+        // Oyuncuyu bul
+        const players = await sql`
+          SELECT * FROM game_players WHERE id = ${player_id}
+        `;
+
+        if (players.length === 0) {
+          return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        const player = players[0];
+
+        // Sıranın bu oyuncuda olup olmadığını kontrol et
+        if (!player.is_turn) {
+          return NextResponse.json({ error: 'Sıra sizde değil' }, { status: 400 });
+        }
+
+        // Sadece 2 kartla double down yapılabilir
+        const playerCards: Card[] = player.cards as Card[];
+        if (playerCards.length !== 2) {
+          return NextResponse.json({ error: 'Double down sadece ilk 2 kartla yapılabilir' }, { status: 400 });
+        }
+
+        // Kullanıcının yeterli bakiyesi var mı kontrol et
+        const user = await sql`SELECT chips FROM users WHERE telegram_id = ${player.telegram_id}`;
+        if (user.length === 0 || user[0].chips < player.bet) {
+          return NextResponse.json({ error: 'Katlamak için yeterli bakiye yok' }, { status: 400 });
+        }
+
+        // Bahsi iki katına çıkar
+        const newBet = player.bet * 2;
+        const additionalBet = player.bet;
+
+        // Kullanıcı bakiyesinden ek bahsi düş
+        await sql`
+          UPDATE users
+          SET chips = chips - ${additionalBet}
+          WHERE telegram_id = ${player.telegram_id} AND chips >= ${additionalBet}
+        `;
+
+        // Yeni kart çek
+        const newCard = deck.pop()!;
+        playerCards.push(newCard);
+
+        const handValue = calculateHandValue(playerCards);
+        const status = handValue > 21 ? 'bust' : 'stand';
+
+        // Oyuncuyu güncelle
+        await sql`
+          UPDATE game_players
+          SET cards = ${JSON.stringify(playerCards)},
+              bet = ${newBet},
+              status = ${status},
+              is_turn = FALSE
+          WHERE id = ${player_id}
+        `;
+
+        // Deck'i güncelle
+        await sql`
+          UPDATE games
+          SET deck = ${JSON.stringify(deck)}
+          WHERE id = ${game.id}
+        `;
+
+        // Sıradaki oyuncuya geç
+        await moveToNextPlayer(game.id, player_id);
+
+        return NextResponse.json({ success: true, handValue, status, newBet });
+      }
+
       case 'dealer_play': {
         // Aktif oyunu bul
         const games = await sql`
@@ -362,7 +513,7 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        const deck: Card[] = game.deck as Card[];
+        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
         let dealerCards: Card[] = (game.dealer_cards as Card[]).map(c => ({ ...c, faceUp: true }));
         let dealerScore = calculateHandValue(dealerCards);
 
@@ -387,8 +538,10 @@ export async function POST(request: NextRequest) {
 
           if (player.status === 'bust') {
             result = 'lose';
+            winAmount = 0;
           } else if (isBlackjack(playerCards) && !isBlackjack(dealerCards)) {
             result = 'blackjack';
+            // Blackjack: Bahis geri + bahsin 1.5 katı kazanç = 2.5x
             winAmount = Math.floor(player.bet * 2.5);
           } else if (dealerScore > 21) {
             result = 'win';
@@ -398,7 +551,10 @@ export async function POST(request: NextRequest) {
             winAmount = player.bet * 2;
           } else if (playerScore === dealerScore) {
             result = 'push';
-            winAmount = player.bet;
+            winAmount = player.bet; // Bahis geri
+          } else {
+            result = 'lose';
+            winAmount = 0;
           }
 
           // Oyuncu durumunu güncelle
@@ -418,11 +574,13 @@ export async function POST(request: NextRequest) {
           }
 
           // İstatistikleri güncelle
+          const won = result === 'win' || result === 'blackjack';
+          const lost = result === 'lose';
           await sql`
             UPDATE users
             SET total_games = total_games + 1,
-                total_wins = total_wins + ${result === 'win' || result === 'blackjack' ? 1 : 0},
-                total_losses = total_losses + ${result === 'lose' ? 1 : 0}
+                total_wins = total_wins + ${won ? 1 : 0},
+                total_losses = total_losses + ${lost ? 1 : 0}
             WHERE telegram_id = ${player.telegram_id}
           `;
         }
@@ -433,8 +591,16 @@ export async function POST(request: NextRequest) {
           SET status = 'results',
               dealer_cards = ${JSON.stringify(dealerCards)},
               dealer_score = ${dealerScore},
+              deck = ${JSON.stringify(deck)},
               ended_at = CURRENT_TIMESTAMP
           WHERE id = ${game.id}
+        `;
+
+        // Oda durumunu güncelle
+        await sql`
+          UPDATE rooms
+          SET status = 'waiting'
+          WHERE id = ${room_id}
         `;
 
         return NextResponse.json({ success: true, dealerScore });
