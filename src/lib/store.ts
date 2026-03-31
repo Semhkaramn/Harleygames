@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { TelegramUser } from './telegram';
-import type { Card, Player, GameState, Room } from './gameTypes';
+import type { Card, Player, Room } from './gameTypes';
 
 // User Store
 interface UserState {
@@ -75,7 +75,7 @@ export const useRoomStore = create<RoomState>((set) => ({
 interface LiveGameState {
   gameId: string | null;
   roomId: string | null;
-  status: GameState['status'];
+  status: 'waiting' | 'betting' | 'dealing' | 'playing' | 'dealer-turn' | 'results';
   players: Player[];
   dealer: { cards: Card[]; score: number };
   currentPlayerIndex: number;
@@ -84,14 +84,12 @@ interface LiveGameState {
   minBet: number;
   maxBet: number;
   timeLeft: number;
-  lastUpdate: number;
 
-  // Actions
   setGame: (game: Partial<LiveGameState>) => void;
   setMyPlayer: (playerId: string, seatNumber: number) => void;
   updatePlayer: (playerId: string, updates: Partial<Player>) => void;
   setDealer: (dealer: { cards: Card[]; score: number }) => void;
-  setStatus: (status: GameState['status']) => void;
+  setStatus: (status: LiveGameState['status']) => void;
   setTimeLeft: (time: number) => void;
   reset: () => void;
 }
@@ -108,60 +106,34 @@ const initialGameState = {
   minBet: 10,
   maxBet: 1000,
   timeLeft: 30,
-  lastUpdate: 0,
 };
 
 export const useLiveGameStore = create<LiveGameState>((set) => ({
   ...initialGameState,
-
-  setGame: (game) => set((state) => ({ ...state, ...game, lastUpdate: Date.now() })),
-
+  setGame: (game) => set((state) => ({ ...state, ...game })),
   setMyPlayer: (playerId, seatNumber) => set({ myPlayerId: playerId, mySeatNumber: seatNumber }),
-
   updatePlayer: (playerId, updates) => set((state) => ({
     players: state.players.map((p) => p.id === playerId ? { ...p, ...updates } : p)
   })),
-
   setDealer: (dealer) => set({ dealer }),
-
   setStatus: (status) => set({ status }),
-
   setTimeLeft: (time) => set({ timeLeft: time }),
-
   reset: () => set(initialGameState),
 }));
 
-// UI Store
+// UI Store - Sadeleştirilmiş
 interface UIState {
-  currentView: 'lobby' | 'game' | 'tournament' | 'leaderboard' | 'profile';
-  isSidebarOpen: boolean;
-  selectedBet: number;
-  isConnected: boolean;
-  error: string | null;
+  currentView: 'lobby' | 'game';
   notification: { type: 'success' | 'error' | 'info'; message: string } | null;
-
   setCurrentView: (view: UIState['currentView']) => void;
-  toggleSidebar: () => void;
-  setSelectedBet: (bet: number) => void;
-  setConnected: (connected: boolean) => void;
-  setError: (error: string | null) => void;
   showNotification: (type: 'success' | 'error' | 'info', message: string) => void;
   clearNotification: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   currentView: 'lobby',
-  isSidebarOpen: false,
-  selectedBet: 10,
-  isConnected: false,
-  error: null,
   notification: null,
-
   setCurrentView: (view) => set({ currentView: view }),
-  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
-  setSelectedBet: (bet) => set({ selectedBet: bet }),
-  setConnected: (connected) => set({ isConnected: connected }),
-  setError: (error) => set({ error }),
   showNotification: (type, message) => set({ notification: { type, message } }),
   clearNotification: () => set({ notification: null }),
 }));
