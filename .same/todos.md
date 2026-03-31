@@ -43,8 +43,9 @@
 - [ ] AFK/Timeout handling
 
 ---
-
+netlify ve neon.tech kullanılıyor envler netlifyede olacak 
 local mode vs hiç olmayacak tamamen gerçek api ler oalcak
+tüm mantıksal hataları vs düzenle gör
 
 ### Blackjack Kuralları (Mevcut Uygulama)
 - Blackjack (ilk 2 kart 21): 2.5x kazanç (bahis geri + 1.5x)
