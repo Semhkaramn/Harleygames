@@ -117,3 +117,13 @@ export function isBust(cards: Card[]): boolean {
 
 // Avatar options
 export const AVATARS = ['🎭', '🎪', '🎰', '🃏', '👑', '💎', '🦁', '🐺', '🦊', '🐯', '🦅', '🐉'];
+
+// Player name generator
+const ADJECTIVES = ['Şanslı', 'Hızlı', 'Cesur', 'Zengin', 'Akıllı', 'Soğukkanlı', 'Stratejik', 'Efsane'];
+const NOUNS = ['Kumarbaz', 'Oyuncu', 'Usta', 'Şampiyon', 'Joker', 'Kral', 'As', 'Profesör'];
+
+export function generatePlayerName(): string {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+  return `${adj} ${noun}`;
+}
