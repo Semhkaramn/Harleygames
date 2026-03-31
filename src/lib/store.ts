@@ -12,6 +12,7 @@ interface UserState {
     first_name: string | null;
     last_name: string | null;
     avatar: string;
+    photo_url: string | null;
     chips: number;
     total_wins: number;
     total_losses: number;
@@ -23,6 +24,7 @@ interface UserState {
   setDbUser: (user: UserState['dbUser']) => void;
   setLoading: (loading: boolean) => void;
   updateChips: (amount: number) => void;
+  setChips: (chips: number) => void;
   logout: () => void;
 }
 
@@ -34,8 +36,19 @@ export const useUserStore = create<UserState>((set) => ({
   setTelegramUser: (user) => set({ telegramUser: user }),
   setDbUser: (user) => set({ dbUser: user, isAuthenticated: !!user, isLoading: false }),
   setLoading: (loading) => set({ isLoading: loading }),
+  // Fix: Ensure numeric addition by parsing both values as numbers
   updateChips: (amount) => set((state) => ({
-    dbUser: state.dbUser ? { ...state.dbUser, chips: state.dbUser.chips + amount } : null
+    dbUser: state.dbUser ? {
+      ...state.dbUser,
+      chips: Number(state.dbUser.chips) + Number(amount)
+    } : null
+  })),
+  // New: Set chips directly (for syncing with server)
+  setChips: (chips) => set((state) => ({
+    dbUser: state.dbUser ? {
+      ...state.dbUser,
+      chips: Number(chips)
+    } : null
   })),
   logout: () => set({ telegramUser: null, dbUser: null, isAuthenticated: false }),
 }));
@@ -71,7 +84,7 @@ export const useRoomStore = create<RoomState>((set) => ({
   })),
 }));
 
-// Live Game Store
+// Live Game Store with betting countdown
 interface LiveGameState {
   gameId: string | null;
   roomId: string | null;
@@ -84,6 +97,7 @@ interface LiveGameState {
   minBet: number;
   maxBet: number;
   timeLeft: number;
+  bettingCountdown: number; // New: countdown for betting phase
 
   setGame: (game: Partial<LiveGameState>) => void;
   setMyPlayer: (playerId: string, seatNumber: number) => void;
@@ -91,6 +105,7 @@ interface LiveGameState {
   setDealer: (dealer: { cards: Card[]; score: number }) => void;
   setStatus: (status: LiveGameState['status']) => void;
   setTimeLeft: (time: number) => void;
+  setBettingCountdown: (time: number) => void;
   reset: () => void;
 }
 
@@ -106,6 +121,7 @@ const initialGameState = {
   minBet: 10,
   maxBet: 1000,
   timeLeft: 30,
+  bettingCountdown: 15, // 15 seconds for betting
 };
 
 export const useLiveGameStore = create<LiveGameState>((set) => ({
@@ -118,10 +134,11 @@ export const useLiveGameStore = create<LiveGameState>((set) => ({
   setDealer: (dealer) => set({ dealer }),
   setStatus: (status) => set({ status }),
   setTimeLeft: (time) => set({ timeLeft: time }),
+  setBettingCountdown: (time) => set({ bettingCountdown: time }),
   reset: () => set(initialGameState),
 }));
 
-// UI Store - Genişletilmiş
+// UI Store
 interface UIState {
   currentView: 'lobby' | 'game' | 'leaderboard';
   notification: { type: 'success' | 'error' | 'info'; message: string } | null;
