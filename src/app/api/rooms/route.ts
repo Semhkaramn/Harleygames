@@ -47,7 +47,21 @@ export async function GET(request: NextRequest) {
       ORDER BY r.created_at DESC
     `;
 
-    return NextResponse.json({ rooms });
+    // Her oda için oyuncu bilgilerini al
+    const roomsWithPlayers = await Promise.all(
+      rooms.map(async (room) => {
+        const players = await sql`
+          SELECT rp.*, u.username, u.first_name, u.photo_url, u.chips
+          FROM room_players rp
+          JOIN users u ON rp.telegram_id = u.telegram_id
+          WHERE rp.room_id = ${room.id}
+          ORDER BY rp.seat_number
+        `;
+        return { ...room, players };
+      })
+    );
+
+    return NextResponse.json({ rooms: roomsWithPlayers });
   } catch (error) {
     console.error('Get rooms error:', error);
     return NextResponse.json({ error: 'Failed to get rooms' }, { status: 500 });
@@ -193,6 +207,58 @@ export async function PATCH(request: NextRequest) {
       }
 
       return NextResponse.json({ success: true });
+    }
+
+    // Koltuk değiştirme
+    if (action === 'change_seat') {
+      if (seat_number === undefined) {
+        return NextResponse.json({ error: 'Seat number required' }, { status: 400 });
+      }
+
+      // Seat number validation
+      if (seat_number < 1 || seat_number > 6) {
+        return NextResponse.json({ error: 'Geçersiz koltuk numarası' }, { status: 400 });
+      }
+
+      // Odanın durumunu kontrol et - sadece waiting durumunda koltuk değiştirilebilir
+      const rooms = await sql`SELECT * FROM rooms WHERE id = ${room_id}`;
+      if (rooms.length === 0) {
+        return NextResponse.json({ error: 'Oda bulunamadı' }, { status: 404 });
+      }
+
+      if (rooms[0].status !== 'waiting') {
+        return NextResponse.json({ error: 'Oyun sırasında koltuk değiştirilemez' }, { status: 400 });
+      }
+
+      // Oyuncunun odada olduğunu kontrol et
+      const existingPlayer = await sql`
+        SELECT id FROM room_players
+        WHERE room_id = ${room_id} AND telegram_id = ${telegram_id}
+      `;
+
+      if (existingPlayer.length === 0) {
+        return NextResponse.json({ error: 'Bu odada değilsiniz' }, { status: 400 });
+      }
+
+      // Hedef koltuğun boş olduğunu kontrol et
+      const existingSeat = await sql`
+        SELECT id FROM room_players
+        WHERE room_id = ${room_id} AND seat_number = ${seat_number}
+        FOR UPDATE
+      `;
+
+      if (existingSeat.length > 0) {
+        return NextResponse.json({ error: 'Bu koltuk zaten dolu' }, { status: 400 });
+      }
+
+      // Koltuğu güncelle
+      await sql`
+        UPDATE room_players
+        SET seat_number = ${seat_number}
+        WHERE room_id = ${room_id} AND telegram_id = ${telegram_id}
+      `;
+
+      return NextResponse.json({ success: true, newSeat: seat_number });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
