@@ -10,7 +10,6 @@ import {
   initTelegramWebApp,
   getTelegramUser,
   isInTelegram,
-  getMockUser,
   hapticFeedback,
 } from '@/lib/telegram';
 
@@ -21,6 +20,7 @@ export default function Home() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [bonusStatus, setBonusStatus] = useState<{ available: boolean; remaining_hours?: number } | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // URL parametrelerini kontrol et
   useEffect(() => {
@@ -43,15 +43,13 @@ export default function Home() {
         initTelegramWebApp();
 
         // Telegram kullanıcısını al
-        let user = getTelegramUser();
+        const user = getTelegramUser();
 
-        // Development modunda mock user kullan
-        if (!user && !isInTelegram()) {
-          user = getMockUser();
-        }
-
-        if (!user) {
+        // Telegram dışında açılmışsa hata göster
+        if (!user || !isInTelegram()) {
+          setAuthError('Bu uygulama sadece Telegram üzerinden açılabilir.');
           setLoading(false);
+          setIsInitialized(true);
           return;
         }
 
@@ -77,12 +75,14 @@ export default function Home() {
           checkBonusStatus(data.user.telegram_id);
         } else {
           console.error('Auth failed:', data.error);
+          setAuthError('Kimlik doğrulama başarısız. Lütfen tekrar deneyin.');
           setLoading(false);
         }
 
         setIsInitialized(true);
       } catch (error) {
         console.error('Init error:', error);
+        setAuthError('Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.');
         setLoading(false);
         setIsInitialized(true);
       }
@@ -160,12 +160,12 @@ export default function Home() {
   }, [setRooms]);
 
   useEffect(() => {
-    if (isInitialized && currentView === 'lobby') {
+    if (isInitialized && dbUser && currentView === 'lobby') {
       fetchRooms();
       const interval = setInterval(fetchRooms, 5000);
       return () => clearInterval(interval);
     }
-  }, [isInitialized, currentView, fetchRooms]);
+  }, [isInitialized, dbUser, currentView, fetchRooms]);
 
   // Notification auto-clear
   useEffect(() => {
@@ -286,6 +286,40 @@ export default function Home() {
             HARLEY GAMES
           </h2>
           <p className="text-gray-500 animate-pulse text-sm">Yükleniyor...</p>
+        </div>
+      </main>
+    );
+  }
+
+  // Telegram dışında açılmışsa hata göster
+  if (authError) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-4">
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-red-500/20 flex items-center justify-center">
+            <span className="text-4xl">🚫</span>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
+            Erişim Hatası
+          </h2>
+          <p className="text-gray-400 mb-6">{authError}</p>
+          <div className="glass rounded-xl p-4">
+            <p className="text-sm text-gray-500 mb-3">Telegram'da oynamak için:</p>
+            <ol className="text-left text-sm text-gray-400 space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500">1.</span>
+                <span>Telegram'ı açın</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500">2.</span>
+                <span>@HarleyGamesBot'u arayın</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500">3.</span>
+                <span>"Başla" butonuna tıklayın</span>
+              </li>
+            </ol>
+          </div>
         </div>
       </main>
     );
@@ -422,12 +456,6 @@ export default function Home() {
               </button>
             </div>
 
-            {!dbUser && (
-              <p className="text-center text-amber-500/80 text-sm mb-6">
-                Telegram üzerinden açarak giriş yapabilirsiniz
-              </p>
-            )}
-
             <Lobby onJoinRoom={handleJoinRoom} onCreateRoom={handleCreateRoom} />
           </div>
         )}
@@ -438,7 +466,7 @@ export default function Home() {
           </div>
         )}
 
-        {currentView === 'game' && (
+        {currentView === 'game' && selectedRoomId && (
           <div className="animate-fade-in">
             <GameTable roomId={selectedRoomId} onBack={handleBackToLobby} />
           </div>
