@@ -60,10 +60,16 @@ export async function initializeDatabase() {
         dealer_score INT DEFAULT 0,
         deck JSONB DEFAULT '[]',
         current_player_index INT DEFAULT 0,
+        betting_end_time BIGINT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         ended_at TIMESTAMP
       )
     `;
+
+    // betting_end_time column ekle (eğer yoksa)
+    await sql`
+      ALTER TABLE games ADD COLUMN IF NOT EXISTS betting_end_time BIGINT
+    `.catch(() => {/* column already exists */});
 
     // Oyuncu-Oyun ilişkisi tablosu
     await sql`
