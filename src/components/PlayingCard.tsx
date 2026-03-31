@@ -7,7 +7,7 @@ import { type Card, SUIT_SYMBOLS, isRedSuit } from '@/lib/gameTypes';
 interface PlayingCardProps {
   card: Card;
   index?: number;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   animate?: boolean;
   flipDelay?: number;
 }
@@ -31,6 +31,7 @@ export function PlayingCard({ card, index = 0, size = 'md', animate = true, flip
   }, [card.faceUp, flipDelay, showFront]);
 
   const sizeClasses = {
+    xs: { card: 'w-10 h-14', font: 'text-[8px]', symbol: 'text-sm', corner: 'text-[6px]' },
     sm: { card: 'w-12 h-[68px]', font: 'text-xs', symbol: 'text-lg', corner: 'text-[8px]' },
     md: { card: 'w-16 h-[92px] md:w-[70px] md:h-[100px]', font: 'text-sm', symbol: 'text-2xl', corner: 'text-[10px]' },
     lg: { card: 'w-20 h-[115px] md:w-24 md:h-[138px]', font: 'text-base', symbol: 'text-3xl', corner: 'text-xs' },
