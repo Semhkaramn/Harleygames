@@ -94,6 +94,33 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   }, [dbUser, setDbUser]);
 
+  // Trigger dealer play
+  const triggerDealerPlay = useCallback(async () => {
+    if (!roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'dealer_play',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await refreshUserData();
+        hapticFeedback('success');
+      }
+    } catch (error) {
+      console.error('Dealer play error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [roomId, isProcessing, refreshUserData]);
+
   // Fetch game state from server
   const fetchGameState = useCallback(async () => {
     if (!roomId) return;
@@ -117,41 +144,13 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
         // Auto trigger dealer play when it's dealer's turn
         if (data.game.status === 'dealer-turn') {
-          await triggerDealerPlay();
+          triggerDealerPlay();
         }
       }
     } catch (error) {
       console.error('Failed to fetch game state:', error);
     }
-  }, [roomId, dbUser]);
-
-  // Trigger dealer play
-  const triggerDealerPlay = async () => {
-    if (!roomId || isProcessing) return;
-
-    setIsProcessing(true);
-    try {
-      const response = await fetch('/api/game', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          room_id: roomId,
-          action: 'dealer_play',
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        await fetchGameState();
-        await refreshUserData();
-        hapticFeedback('success');
-      }
-    } catch (error) {
-      console.error('Dealer play error:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  }, [roomId, dbUser, triggerDealerPlay]);
 
   // Start polling for server mode
   useEffect(() => {
