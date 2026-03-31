@@ -14,10 +14,17 @@
 - [x] Header/Navbar bileşeni
 - [x] Ana sayfa entegrasyonu
 
+## Aktif Görevler
+- [x] Neon.tech PostgreSQL veritabanı entegrasyonu
+- [x] Telegram WebApp SDK entegrasyonu
+- [x] Telegram kullanıcı kimlik doğrulama
+- [x] API routes (kullanıcı, oyun, oda)
+- [x] Zustand ile global state yönetimi
+- [x] Real-time polling sistemi
+- [x] Kullanıcı bakiye ve skor kayıtları
+
 ## Yapılacaklar
-- [ ] Real-time multiplayer (Socket.IO entegrasyonu)
-- [ ] Telegram bot entegrasyonu
-- [ ] Kullanıcı kimlik doğrulama
-- [ ] Veritabanı bağlantısı (skor, bakiye kayıtları)
 - [ ] Ses efektleri
 - [ ] Daha fazla animasyon
+- [ ] Turnuva sistemi
+- [ ] Liderlik tablosu
