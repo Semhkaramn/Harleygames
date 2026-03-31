@@ -452,6 +452,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Double down sadece ilk 2 kartla yapılabilir' }, { status: 400 });
         }
 
+        // Blackjack varsa double down yapılamaz
+        if (isBlackjack(playerCards)) {
+          return NextResponse.json({ error: 'Blackjack ile double down yapılamaz' }, { status: 400 });
+        }
+
         // Kullanıcının yeterli bakiyesi var mı kontrol et
         const user = await sql`SELECT chips FROM users WHERE telegram_id = ${player.telegram_id}`;
         if (user.length === 0 || user[0].chips < player.bet) {
@@ -530,29 +535,46 @@ export async function POST(request: NextRequest) {
           WHERE game_id = ${game.id} AND bet > 0
         `;
 
+        const dealerHasBlackjack = isBlackjack(dealerCards);
+
         for (const player of players) {
           const playerCards: Card[] = player.cards as Card[];
           const playerScore = calculateHandValue(playerCards);
+          const playerHasBlackjack = isBlackjack(playerCards);
           let result = 'lose';
           let winAmount = 0;
 
           if (player.status === 'bust') {
+            // Oyuncu battı
             result = 'lose';
             winAmount = 0;
-          } else if (isBlackjack(playerCards) && !isBlackjack(dealerCards)) {
+          } else if (playerHasBlackjack && dealerHasBlackjack) {
+            // İkisi de blackjack - Push
+            result = 'push';
+            winAmount = player.bet;
+          } else if (playerHasBlackjack) {
+            // Sadece oyuncu blackjack
             result = 'blackjack';
             // Blackjack: Bahis geri + bahsin 1.5 katı kazanç = 2.5x
             winAmount = Math.floor(player.bet * 2.5);
+          } else if (dealerHasBlackjack) {
+            // Sadece dealer blackjack
+            result = 'lose';
+            winAmount = 0;
           } else if (dealerScore > 21) {
+            // Dealer battı
             result = 'win';
             winAmount = player.bet * 2;
           } else if (playerScore > dealerScore) {
+            // Oyuncu daha yüksek
             result = 'win';
             winAmount = player.bet * 2;
           } else if (playerScore === dealerScore) {
+            // Berabere
             result = 'push';
-            winAmount = player.bet; // Bahis geri
+            winAmount = player.bet;
           } else {
+            // Dealer daha yüksek
             result = 'lose';
             winAmount = 0;
           }
