@@ -5,7 +5,43 @@ import { useGameStore, calculateHandValue } from '@/store/gameStore';
 import { LobbyView } from '@/components/game/LobbyView';
 import { TableView } from '@/components/game/TableView';
 import { getTelegramUser, getTelegramWebApp, initTelegramWebApp, isInTelegram } from '@/lib/telegram';
-import type { Player, Card, RoomStatus } from '@/types/game';
+import type { Player, Card } from '@/types/game';
+
+interface RoomData {
+  id: string;
+  name: string;
+  min_bet: number;
+  max_bet: number;
+  max_players?: number;
+  status: string;
+  created_by: string;
+  player_count: string;
+}
+
+interface GamePlayerData {
+  id: string | number;
+  telegramId?: number;
+  telegram_id?: number;
+  name?: string;
+  first_name?: string;
+  avatar?: string;
+  photo_url?: string;
+  balance?: number;
+  chips?: number;
+  seatNumber?: number;
+  seat_number?: number;
+  cards?: Card[];
+  bet?: number;
+  status?: string;
+  isTurn?: boolean;
+  is_turn?: boolean;
+}
+
+interface GameResultData {
+  telegramId?: number;
+  telegram_id?: number;
+  winAmount?: number;
+}
 
 export default function Home() {
   const {
@@ -119,7 +155,7 @@ export default function Home() {
 
     // Connected event
     eventSource.addEventListener('connected', (e) => {
-      console.log('SSE connected event:', JSON.parse(e.data));
+      console.log('SSE connected event:', JSON.parse((e as MessageEvent).data));
     });
 
     // Heartbeat
@@ -129,9 +165,9 @@ export default function Home() {
 
     // Rooms update (lobby)
     eventSource.addEventListener('rooms_update', (e) => {
-      const data = JSON.parse(e.data);
+      const data = JSON.parse((e as MessageEvent).data);
       if (data.rooms) {
-        const rooms = data.rooms.map((r: any) => ({
+        const rooms = data.rooms.map((r: RoomData) => ({
           id: r.id,
           name: r.name,
           minBet: r.min_bet,
@@ -148,12 +184,12 @@ export default function Home() {
 
     // Game update (room)
     eventSource.addEventListener('game_update', (e) => {
-      const data = JSON.parse(e.data);
+      const data = JSON.parse((e as MessageEvent).data);
       if (data.game && activeGame) {
         const game = data.game;
 
         // Oyuncuları map et
-        const players: Player[] = (game.players || []).map((p: any) => ({
+        const players: Player[] = (game.players || []).map((p: GamePlayerData) => ({
           id: String(p.id),
           telegramId: p.telegramId || p.telegram_id,
           name: p.name || p.first_name || 'Oyuncu',
@@ -163,7 +199,7 @@ export default function Home() {
           cards: p.cards || [],
           bet: p.bet || 0,
           status: p.status || 'waiting',
-          isCurrentUser: (p.telegramId || p.telegram_id) === currentUser.telegramId,
+          isCurrentUser: (p.telegramId || p.telegram_id) === currentUser?.telegramId,
           totalScore: p.cards ? calculateHandValue(p.cards) : 0,
           isTurn: p.isTurn || p.is_turn || false,
         }));
@@ -190,26 +226,26 @@ export default function Home() {
 
     // Player joined
     eventSource.addEventListener('player_joined', (e) => {
-      const data = JSON.parse(e.data);
+      const data = JSON.parse((e as MessageEvent).data);
       console.log('Player joined:', data);
       // Game update ile gelecek
     });
 
     // Player left
     eventSource.addEventListener('player_left', (e) => {
-      const data = JSON.parse(e.data);
+      const data = JSON.parse((e as MessageEvent).data);
       console.log('Player left:', data);
       // Game update ile gelecek
     });
 
     // Game results
     eventSource.addEventListener('game_results', (e) => {
-      const data = JSON.parse(e.data);
+      const data = JSON.parse((e as MessageEvent).data);
       console.log('Game results:', data);
 
-      if (data.results && activeGame) {
+      if (data.results && activeGame && currentUser) {
         // Bakiyeyi güncelle
-        const myResult = data.results.find((r: any) =>
+        const myResult = data.results.find((r: GameResultData) =>
           r.telegramId === currentUser.telegramId || r.telegram_id === currentUser.telegramId
         );
 
@@ -224,7 +260,7 @@ export default function Home() {
 
     // Room created
     eventSource.addEventListener('room_created', (e) => {
-      const data = JSON.parse(e.data);
+      const data = JSON.parse((e as MessageEvent).data);
       console.log('Room created:', data);
       // Rooms update ile gelecek
     });
@@ -232,7 +268,8 @@ export default function Home() {
     return () => {
       eventSource.close();
     };
-  }, [currentUser, activeGame?.roomId, setConnected, setRooms, updateActiveGame, setCountdown, setTurnTimer, setCurrentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.telegramId, activeGame?.roomId, setConnected, setRooms, updateActiveGame, setCountdown, setTurnTimer, setCurrentUser]);
 
   // SSE bağlantısını yönet
   useEffect(() => {
@@ -251,6 +288,7 @@ export default function Home() {
         eventSourceRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, currentUser?.telegramId, activeGame?.roomId, view, connectSSE, fetchRooms]);
 
   // Yükleniyor
