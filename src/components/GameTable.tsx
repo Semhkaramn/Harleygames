@@ -13,14 +13,14 @@ interface GameTableProps {
   onBack: () => void;
 }
 
-// Seat positions around the table (semi-circle)
+// Mobil için seat positions - daha kompakt yarım daire
 const SEAT_POSITIONS = [
-  { x: '10%', y: '70%' },
-  { x: '25%', y: '82%' },
-  { x: '50%', y: '88%' },
-  { x: '75%', y: '82%' },
-  { x: '90%', y: '70%' },
-  { x: '50%', y: '55%' },
+  { x: '8%', y: '65%' },
+  { x: '28%', y: '80%' },
+  { x: '50%', y: '85%' },
+  { x: '72%', y: '80%' },
+  { x: '92%', y: '65%' },
+  { x: '50%', y: '50%' },
 ];
 
 interface ServerGameState {
@@ -48,7 +48,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const { dbUser, setDbUser } = useUserStore();
   const { showNotification } = useUIStore();
 
-  // Server game state
   const [serverGame, setServerGame] = useState<ServerGameState | null>(null);
   const [myGamePlayerId, setMyGamePlayerId] = useState<string | null>(null);
 
@@ -57,7 +56,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  const chipValues = [5, 10, 25, 50, 100, 500];
+  const chipValues = [5, 10, 25, 50, 100];
 
   // Refresh user data from server
   const refreshUserData = useCallback(async () => {
@@ -122,7 +121,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       if (data.game) {
         setServerGame(data.game);
 
-        // Find my player in the game
         if (dbUser) {
           const myPlayer = data.game.players?.find(
             (p: { telegramId: number }) => p.telegramId === dbUser.telegram_id
@@ -132,7 +130,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
           }
         }
 
-        // Auto trigger dealer play when it's dealer's turn
         if (data.game.status === 'dealer-turn') {
           triggerDealerPlay();
         }
@@ -213,7 +210,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         await refreshUserData();
         hapticFeedback('success');
 
-        // Auto deal after bet
         setTimeout(async () => {
           await handleDeal();
         }, 500);
@@ -440,48 +436,37 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const dealerHasBlackjack = isBlackjack(gameDealer.cards);
 
   return (
-    <div className="relative w-full h-[550px] md:h-[650px] lg:h-[700px] overflow-hidden">
-      {/* Back Button */}
-      <button
-        type="button"
-        onClick={onBack}
-        className="absolute top-3 left-3 z-20 glass rounded-lg px-3 py-1.5 text-xs text-gray-300 hover:text-white transition-colors flex items-center gap-1"
-      >
-        <span>←</span> Geri
-      </button>
-
+    <div className="relative w-full h-[420px] overflow-hidden">
       {/* Table Background */}
-      <div className="absolute inset-0 felt-pattern rounded-[40%] border-[6px] border-amber-800/80 shadow-2xl" style={{
-        boxShadow: 'inset 0 0 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.5)',
+      <div className="absolute inset-0 felt-pattern rounded-[30%] border-4 border-amber-800/80 shadow-xl" style={{
+        boxShadow: 'inset 0 0 40px rgba(0, 0, 0, 0.6)',
       }}>
-        <div className="absolute inset-3 rounded-[40%] border border-amber-900/40" />
-
-        <div className="absolute top-[28%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center opacity-15">
-          <h2 className="text-3xl md:text-5xl font-bold text-amber-500" style={{ fontFamily: "'Playfair Display', serif" }}>
+        <div className="absolute inset-2 rounded-[30%] border border-amber-900/40" />
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center opacity-10">
+          <h2 className="text-2xl font-bold text-amber-500" style={{ fontFamily: "'Playfair Display', serif" }}>
             HARLEY
           </h2>
-          <p className="text-sm md:text-lg text-amber-600 tracking-widest">GAMES</p>
         </div>
       </div>
 
       {/* Dealer Area */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center">
-        <div className="mb-3 px-4 py-1 bg-black/60 rounded-full border border-amber-500/30">
-          <span className="text-amber-400 font-semibold text-xs tracking-wider">KRUPIYE</span>
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center">
+        <div className="mb-1 px-2 py-0.5 bg-black/60 rounded-full border border-amber-500/30">
+          <span className="text-amber-400 font-semibold text-[10px] tracking-wider">KRUPIYE</span>
         </div>
 
-        <div className="flex -space-x-3 mb-2">
+        <div className="flex -space-x-2 mb-1">
           {gameDealer.cards.length > 0 ? (
             gameDealer.cards.map((card, index) => (
-              <PlayingCard key={`dealer-${index}`} card={card} index={index} size="sm" />
+              <PlayingCard key={`dealer-${index}`} card={card} index={index} size="xs" />
             ))
           ) : (
-            <div className="w-14 h-20 md:w-16 md:h-24 border-2 border-dashed border-amber-600/30 rounded-lg" />
+            <div className="w-10 h-14 border-2 border-dashed border-amber-600/30 rounded-md" />
           )}
         </div>
 
         {gameDealer.cards.length > 0 && (
-          <div className={`px-3 py-1 rounded-full text-xs font-bold ${dealerScore > 21 ? 'bg-red-500' : 'bg-black/80'} text-white border border-white/10`}>
+          <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dealerScore > 21 ? 'bg-red-500' : 'bg-black/80'} text-white border border-white/10`}>
             {gameStatus === 'results' || gameStatus === 'dealer-turn' ? (
               dealerHasBlackjack ? 'BJ!' : dealerScore
             ) : (
@@ -510,31 +495,31 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       {/* Betting Panel */}
       {showBetPanel && (gameStatus === 'betting' || gameStatus === 'waiting') && (!currentPlayer || currentPlayer.bet === 0) && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-2xl p-4 animate-slide-up max-w-sm w-[95%]">
-          <h3 className="text-center text-amber-400 font-semibold mb-3 text-sm">Bahis Yap</h3>
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 glass rounded-xl p-3 animate-slide-up w-[90%] max-w-xs">
+          <h3 className="text-center text-amber-400 font-semibold mb-2 text-xs">Bahis Yap</h3>
 
-          <div className="flex gap-1.5 md:gap-2 justify-center mb-3 flex-wrap">
+          <div className="flex gap-1 justify-center mb-2 flex-wrap">
             {chipValues.map((value) => (
               <Chip
                 key={value}
                 value={value}
                 onClick={() => handleChipClick(value)}
-                size="sm"
+                size="xs"
                 disabled={(dbUser?.chips || 0) < selectedBet + value}
               />
             ))}
           </div>
 
-          <div className="text-center mb-3">
-            <span className="text-gray-400 text-xs">Bahis:</span>
-            <span className="text-amber-400 font-bold text-xl ml-2">{selectedBet}</span>
+          <div className="text-center mb-2">
+            <span className="text-gray-400 text-[10px]">Bahis:</span>
+            <span className="text-amber-400 font-bold text-base ml-1">{selectedBet}</span>
           </div>
 
           <div className="flex gap-2 justify-center">
             <button
               type="button"
               onClick={handleClearBet}
-              className="btn-secondary text-xs px-4 py-2"
+              className="btn-secondary text-[10px] px-3 py-1.5"
               disabled={isProcessing}
             >
               Temizle
@@ -543,13 +528,13 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
               type="button"
               onClick={handleBet}
               disabled={selectedBet === 0 || isProcessing}
-              className="btn-gold text-xs px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-gold text-[10px] px-4 py-1.5 disabled:opacity-50"
             >
-              {isProcessing ? 'İşleniyor...' : 'Onayla'}
+              {isProcessing ? '...' : 'Onayla'}
             </button>
           </div>
 
-          <p className="text-center text-gray-500 text-[10px] mt-2">
+          <p className="text-center text-gray-500 text-[8px] mt-1">
             Bakiye: <span className="text-amber-400">{dbUser?.chips?.toLocaleString() || 0}</span>
           </p>
         </div>
@@ -557,12 +542,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       {/* Action Buttons (Hit, Stand, Double) */}
       {gameStatus === 'playing' && isPlayerTurn && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 animate-slide-up">
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 animate-slide-up">
           <button
             type="button"
             onClick={handleHit}
             disabled={!canHit}
-            className="btn-primary px-5 py-2.5 text-sm disabled:opacity-50"
+            className="btn-primary px-4 py-2 text-xs disabled:opacity-50"
           >
             {isProcessing ? '...' : 'Kart Al'}
           </button>
@@ -570,7 +555,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             type="button"
             onClick={handleStand}
             disabled={!canStand}
-            className="btn-secondary px-5 py-2.5 text-sm disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs disabled:opacity-50"
           >
             Dur
           </button>
@@ -578,7 +563,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             <button
               type="button"
               onClick={handleDouble}
-              className="btn-gold px-5 py-2.5 text-sm"
+              className="btn-gold px-4 py-2 text-xs"
             >
               Katla
             </button>
@@ -588,13 +573,13 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       {/* Game Results */}
       {gameStatus === 'results' && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 text-center animate-slide-up">
-          <div className="glass rounded-xl px-5 py-3">
-            <h3 className="text-lg font-bold text-amber-400 mb-2">Sonuçlar</h3>
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 text-center animate-slide-up">
+          <div className="glass rounded-lg px-4 py-2">
+            <h3 className="text-sm font-bold text-amber-400 mb-1">Sonuçlar</h3>
             {gamePlayers.map((player) => {
               const result = getResultDisplay(player);
               return (
-                <div key={player.id} className="flex items-center justify-between gap-4 text-sm">
+                <div key={player.id} className="flex items-center justify-between gap-3 text-xs">
                   <span className="text-white">{player.name}</span>
                   <span className={`font-bold ${result.color}`}>
                     {player.status === 'blackjack' && <span className="text-amber-400 mr-1">BJ!</span>}
@@ -607,17 +592,17 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
               type="button"
               onClick={handleNewGame}
               disabled={isProcessing}
-              className="btn-gold text-xs px-4 py-2 mt-3 disabled:opacity-50"
+              className="btn-gold text-[10px] px-3 py-1.5 mt-2 disabled:opacity-50"
             >
-              {isProcessing ? 'Başlatılıyor...' : 'Yeni Oyun'}
+              {isProcessing ? '...' : 'Yeni Oyun'}
             </button>
           </div>
         </div>
       )}
 
       {/* Status indicator */}
-      <div className="absolute top-3 right-3 glass rounded-lg px-2.5 py-1.5">
-        <div className="flex items-center gap-1.5">
+      <div className="absolute top-2 right-2 glass rounded-md px-2 py-1">
+        <div className="flex items-center gap-1">
           <div className={`w-1.5 h-1.5 rounded-full ${
             gameStatus === 'waiting' ? 'bg-gray-400' :
             gameStatus === 'betting' ? 'bg-amber-400 animate-pulse' :
@@ -625,22 +610,21 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             gameStatus === 'dealer-turn' ? 'bg-blue-400 animate-pulse' :
             'bg-purple-400'
           }`} />
-          <span className="text-[10px] text-gray-300">
+          <span className="text-[9px] text-gray-300">
             {gameStatus === 'waiting' ? 'Bekleniyor' :
              gameStatus === 'betting' ? 'Bahis' :
              gameStatus === 'playing' ? 'Oyun' :
              gameStatus === 'dealer-turn' ? 'Krupiye' :
-             'Sonuçlar'}
+             'Sonuç'}
           </span>
-          <span className="text-[8px] text-green-400 ml-1">● CANLI</span>
         </div>
       </div>
 
       {/* Player Score Display */}
       {currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0 && gameStatus === 'playing' && (
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2">
-          <div className="bg-black/80 px-4 py-2 rounded-full border border-amber-500/30">
-            <span className="text-amber-400 font-bold">
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+          <div className="bg-black/80 px-3 py-1 rounded-full border border-amber-500/30">
+            <span className="text-amber-400 font-bold text-sm">
               {calculateHandValue(currentPlayer.cards)}
             </span>
           </div>
@@ -648,11 +632,9 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       )}
 
       {/* Room ID display */}
-      <div className="absolute bottom-3 left-3 glass rounded-lg px-2.5 py-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-gray-400">Oda:</span>
-          <span className="text-[10px] text-amber-400 font-mono">{roomId}</span>
-        </div>
+      <div className="absolute bottom-2 left-2 glass rounded-md px-2 py-1">
+        <span className="text-[8px] text-gray-400">Oda: </span>
+        <span className="text-[8px] text-amber-400 font-mono">{roomId.slice(0, 8)}</span>
       </div>
     </div>
   );
