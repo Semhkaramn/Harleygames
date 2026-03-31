@@ -763,18 +763,29 @@ export async function POST(request: NextRequest) {
 
 // Sıradaki oyuncuya geç
 async function moveToNextPlayer(gameId: number, currentPlayerId: string) {
-  // Mevcut oyuncunun sırasını kapat
+  // Mevcut oyuncunun sırasını kapat ve seat_number'ını al
+  const currentPlayerData = await sql`
+    SELECT seat_number FROM game_players WHERE id = ${currentPlayerId}
+  `;
+
   await sql`
     UPDATE game_players
     SET is_turn = FALSE
     WHERE id = ${currentPlayerId}
   `;
 
-  // Sıradaki playing durumundaki oyuncuyu bul (skipped olanları atla)
+  const currentSeatNumber = currentPlayerData.length > 0 ? currentPlayerData[0].seat_number : 0;
+
+  // Sıradaki playing durumundaki oyuncuyu bul (seat_number'a göre sıralı - düşük seat_number'dan yüksek'e)
+  // Mevcut oyuncudan sonraki seat_number'a sahip oyuncuyu bul
   const nextPlayers = await sql`
     SELECT * FROM game_players
-    WHERE game_id = ${gameId} AND status = 'playing' AND is_turn = FALSE AND bet > 0
-    ORDER BY seat_number
+    WHERE game_id = ${gameId}
+      AND status = 'playing'
+      AND is_turn = FALSE
+      AND bet > 0
+      AND seat_number > ${currentSeatNumber}
+    ORDER BY seat_number ASC
     LIMIT 1
   `;
 
