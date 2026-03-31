@@ -14,17 +14,16 @@ interface GameActionsProps {
 
 export function GameActions({ canHit, canStand, canDouble, onHit, onStand, onDouble }: GameActionsProps) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent">
-      <div className="max-w-md mx-auto flex gap-3">
+    <div className="fixed bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+      <div className="max-w-xs mx-auto flex gap-2">
         <Button
           onClick={onHit}
           disabled={!canHit}
+          size="sm"
           className={cn(
-            'flex-1 h-14 text-lg font-bold',
-            'bg-gradient-to-r from-blue-600 to-blue-500',
-            'hover:from-blue-500 hover:to-blue-400',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'shadow-lg shadow-blue-600/30'
+            'flex-1 h-10 text-sm font-bold',
+            'bg-blue-600 hover:bg-blue-500',
+            'disabled:opacity-50'
           )}
         >
           Kart Al
@@ -33,12 +32,11 @@ export function GameActions({ canHit, canStand, canDouble, onHit, onStand, onDou
         <Button
           onClick={onStand}
           disabled={!canStand}
+          size="sm"
           className={cn(
-            'flex-1 h-14 text-lg font-bold',
-            'bg-gradient-to-r from-red-600 to-red-500',
-            'hover:from-red-500 hover:to-red-400',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'shadow-lg shadow-red-600/30'
+            'flex-1 h-10 text-sm font-bold',
+            'bg-red-600 hover:bg-red-500',
+            'disabled:opacity-50'
           )}
         >
           Dur
@@ -47,12 +45,11 @@ export function GameActions({ canHit, canStand, canDouble, onHit, onStand, onDou
         <Button
           onClick={onDouble}
           disabled={!canDouble}
+          size="sm"
           className={cn(
-            'flex-1 h-14 text-lg font-bold',
-            'bg-gradient-to-r from-yellow-600 to-yellow-500',
-            'hover:from-yellow-500 hover:to-yellow-400 text-black',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'shadow-lg shadow-yellow-600/30'
+            'flex-1 h-10 text-sm font-bold',
+            'bg-yellow-500 hover:bg-yellow-400 text-black',
+            'disabled:opacity-50'
           )}
         >
           2x
