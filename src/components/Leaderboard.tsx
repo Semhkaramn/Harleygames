@@ -5,14 +5,14 @@ import { useUserStore } from '@/lib/store';
 
 interface LeaderboardEntry {
   rank: number;
-  telegramId: number;
+  telegram_id: number;
   username: string | null;
-  firstName: string | null;
+  first_name: string | null;
   avatar: string;
   chips: number;
-  wins: number;
-  games: number;
-  winRate: number;
+  total_wins: number;
+  total_games: number;
+  win_rate: number;
 }
 
 export function Leaderboard() {
@@ -91,9 +91,9 @@ export function Leaderboard() {
         <div className="space-y-2">
           {leaderboard.map((entry) => (
             <div
-              key={entry.telegramId}
+              key={entry.telegram_id}
               className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${getRankStyle(entry.rank)} ${
-                dbUser?.telegram_id === entry.telegramId ? 'ring-2 ring-amber-500' : ''
+                dbUser?.telegram_id === entry.telegram_id ? 'ring-2 ring-amber-500' : ''
               }`}
             >
               {/* Rank */}
@@ -113,13 +113,13 @@ export function Leaderboard() {
               {/* Name */}
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white truncate">
-                  {entry.firstName || entry.username || 'Oyuncu'}
-                  {dbUser?.telegram_id === entry.telegramId && (
+                  {entry.first_name || entry.username || 'Oyuncu'}
+                  {dbUser?.telegram_id === entry.telegram_id && (
                     <span className="ml-2 text-xs text-amber-500">(Sen)</span>
                   )}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {entry.wins} kazanma / {entry.games} oyun ({entry.winRate}%)
+                  {entry.total_wins} kazanma / {entry.total_games} oyun ({entry.win_rate}%)
                 </p>
               </div>
 
@@ -134,7 +134,7 @@ export function Leaderboard() {
       )}
 
       {/* Current User Position (if not in top 20) */}
-      {dbUser && !leaderboard.find(e => e.telegramId === dbUser.telegram_id) && (
+      {dbUser && !leaderboard.find(e => e.telegram_id === dbUser.telegram_id) && (
         <div className="mt-6 pt-4 border-t border-white/10">
           <p className="text-center text-gray-500 text-sm mb-2">Senin sıralaman</p>
           <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
