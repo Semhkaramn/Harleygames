@@ -1,82 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUser, getUser, initializeDatabase } from '@/lib/db';
-import crypto from 'crypto';
+import { sql, initializeDatabase } from '@/lib/db';
 
-// Veritabanı bağlantısı kontrolü
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  console.error('CRITICAL: DATABASE_URL is not configured!');
-}
-
-// Telegram initData doğrulama
-function verifyTelegramAuth(initData: string, botToken: string): boolean {
-  if (!initData || !botToken) return false;
-
-  try {
-    const params = new URLSearchParams(initData);
-    const hash = params.get('hash');
-    if (!hash) return false;
-
-    params.delete('hash');
-    const dataCheckArr = Array.from(params.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${value}`);
-    const dataCheckString = dataCheckArr.join('\n');
-
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-
-    return calculatedHash === hash;
-  } catch {
-    return false;
-  }
-}
+// Veritabanını başlat
+let dbInitialized = false;
 
 export async function POST(request: NextRequest) {
   try {
+    // Veritabanını ilk istekte başlat
+    if (!dbInitialized) {
+      await initializeDatabase();
+      dbInitialized = true;
+    }
+
     const body = await request.json();
-    const { initData, user } = body;
+    const { telegram_id, username, first_name, last_name, photo_url, init_data } = body;
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
-
-    // Telegram doğrulama - her zaman zorunlu
-    if (botToken && !verifyTelegramAuth(initData, botToken)) {
-      return NextResponse.json({ error: 'Invalid Telegram auth' }, { status: 401 });
+    if (!telegram_id) {
+      return NextResponse.json({ error: 'Telegram ID required' }, { status: 400 });
     }
 
-    // Kullanıcı bilgisi gerekli
-    if (!user || !user.id) {
-      return NextResponse.json({ error: 'User data required' }, { status: 400 });
+    // Kullanıcıyı bul veya oluştur
+    const existingUsers = await sql`
+      SELECT * FROM users WHERE telegram_id = ${telegram_id}
+    `;
+
+    let user;
+
+    if (existingUsers.length > 0) {
+      // Mevcut kullanıcıyı güncelle
+      const updateResult = await sql`
+        UPDATE users SET
+          username = COALESCE(${username || null}, username),
+          first_name = COALESCE(${first_name || null}, first_name),
+          last_name = COALESCE(${last_name || null}, last_name),
+          photo_url = COALESCE(${photo_url || null}, photo_url),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE telegram_id = ${telegram_id}
+        RETURNING *
+      `;
+      user = updateResult[0];
+    } else {
+      // Yeni kullanıcı oluştur
+      const createResult = await sql`
+        INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, chips)
+        VALUES (${telegram_id}, ${username || null}, ${first_name || null}, ${last_name || null}, ${photo_url || null}, 1000)
+        RETURNING *
+      `;
+      user = createResult[0];
     }
-
-    // Veritabanını başlat (sadece ilk kez)
-    await initializeDatabase();
-
-    // Kullanıcıyı oluştur veya güncelle
-    const dbUser = await createUser({
-      telegram_id: user.id,
-      username: user.username,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      photo_url: user.photo_url,
-    });
 
     return NextResponse.json({
       success: true,
       user: {
-        ...dbUser,
-        chips: Number(dbUser.chips), // Ensure chips is number
+        id: user.id,
+        telegram_id: user.telegram_id,
+        username: user.username,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        photo_url: user.photo_url,
+        avatar: user.avatar,
+        chips: user.chips,
+        total_wins: user.total_wins,
+        total_losses: user.total_losses,
+        total_games: user.total_games,
       },
     });
   } catch (error) {
     console.error('Auth error:', error);
-    return NextResponse.json(
-      { error: 'Authentication failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
   }
 }
 
+// Kullanıcı bilgilerini getir
 export async function GET(request: NextRequest) {
   try {
     const telegramId = request.nextUrl.searchParams.get('telegram_id');
@@ -85,13 +80,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Telegram ID required' }, { status: 400 });
     }
 
-    const user = await getUser(parseInt(telegramId));
+    const users = await sql`
+      SELECT * FROM users WHERE telegram_id = ${telegramId}
+    `;
 
-    if (!user) {
+    if (users.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ user });
+    const user = users[0];
+
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        telegram_id: user.telegram_id,
+        username: user.username,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        photo_url: user.photo_url,
+        avatar: user.avatar,
+        chips: user.chips,
+        total_wins: user.total_wins,
+        total_losses: user.total_losses,
+        total_games: user.total_games,
+      },
+    });
   } catch (error) {
     console.error('Get user error:', error);
     return NextResponse.json({ error: 'Failed to get user' }, { status: 500 });
