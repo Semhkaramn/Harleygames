@@ -1,28 +1,17 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Card, GameState, Player, PlayerStatus, Rank, Suit, Table, TableStatus } from '@/types/game';
-
-// Kart destesi oluştur
-const createDeck = (): Card[] => {
-  const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
-  const ranks: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-  const deck: Card[] = [];
-
-  for (const suit of suits) {
-    for (const rank of ranks) {
-      deck.push({ suit, rank, faceUp: true });
-    }
-  }
-
-  // Shuffle
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-
-  return deck;
-};
+import type {
+  GameState,
+  CurrentUser,
+  Room,
+  ActiveGame,
+  Player,
+  Card,
+  RoomStatus,
+  DBRoom,
+  DBRoomPlayer
+} from '@/types/game';
 
 // Kart değeri hesapla
 const getCardValue = (card: Card): number => {
@@ -32,7 +21,7 @@ const getCardValue = (card: Card): number => {
 };
 
 // El değeri hesapla
-const calculateHandValue = (cards: Card[]): number => {
+export const calculateHandValue = (cards: Card[]): number => {
   let value = 0;
   let aces = 0;
 
@@ -42,7 +31,6 @@ const calculateHandValue = (cards: Card[]): number => {
     if (card.rank === 'A') aces++;
   }
 
-  // As'ları 1 olarak say eğer 21'i geçiyorsa
   while (value > 21 && aces > 0) {
     value -= 10;
     aces--;
@@ -51,685 +39,434 @@ const calculateHandValue = (cards: Card[]): number => {
   return value;
 };
 
-// Bot isimleri ve avatarları
-const botNames = ['Ahmet', 'Mehmet', 'Ayşe', 'Fatma', 'Ali', 'Zeynep', 'Can', 'Elif'];
-const botAvatars = [
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Bob',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Charlie',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Frank',
-  'https://api.dicebear.com/7.x/avataaars/svg?seed=Grace',
-];
-
-// Rastgele bot oluştur
-const createBot = (seatIndex: number): Player => {
-  const nameIndex = Math.floor(Math.random() * botNames.length);
-  return {
-    id: `bot-${Date.now()}-${Math.random()}`,
-    name: botNames[nameIndex],
-    avatar: botAvatars[nameIndex],
-    balance: 1000 + Math.floor(Math.random() * 4000),
-    seatIndex,
+// DB Room'u frontend Room'a çevir
+const mapDBRoomToRoom = (dbRoom: DBRoom, players: DBRoomPlayer[] = []): Room => ({
+  id: dbRoom.id,
+  name: dbRoom.name,
+  minBet: dbRoom.min_bet,
+  maxBet: dbRoom.max_bet,
+  maxPlayers: dbRoom.max_players || 6,
+  status: dbRoom.status,
+  createdBy: dbRoom.created_by,
+  playerCount: dbRoom.player_count || players.length,
+  players: players.map(p => ({
+    id: String(p.id),
+    telegramId: p.telegram_id,
+    name: p.first_name || p.username || 'Oyuncu',
+    avatar: p.photo_url || '',
+    balance: p.chips || 0,
+    seatNumber: p.seat_number,
     cards: [],
     bet: 0,
-    status: 'ready',
+    status: 'waiting',
     isCurrentUser: false,
     totalScore: 0,
-    hasInsurance: false,
-  };
-};
+    isTurn: false,
+  })),
+});
 
-// Başlangıç masaları - BOŞ OLACAK (bot yok)
-const createInitialTables = (): Table[] => {
-  const tables: Table[] = [];
+interface GameStore extends GameState {
+  // Auth actions
+  setCurrentUser: (user: CurrentUser | null) => void;
+  setAuthenticated: (value: boolean) => void;
+  setLoading: (value: boolean) => void;
 
-  for (let i = 1; i <= 6; i++) {
-    tables.push({
-      id: `table-${i}`,
-      name: `Masa ${i}`,
-      minBet: i <= 2 ? 10 : i <= 4 ? 50 : 100,
-      maxBet: i <= 2 ? 500 : i <= 4 ? 2000 : 5000,
-      maxPlayers: 5,
-      players: [], // Boş başla - bot yok
-      status: 'waiting',
-      dealerCards: [],
-      dealerScore: 0,
-      currentPlayerIndex: -1,
-      countdown: 0,
-      turnTimer: 15,
-      roundNumber: 0,
-    });
-  }
+  // Room actions
+  setRooms: (rooms: Room[]) => void;
+  updateRoom: (roomId: string, updates: Partial<Room>) => void;
+  addRoom: (room: Room) => void;
+  removeRoom: (roomId: string) => void;
 
-  return tables;
-};
+  // Game actions
+  setActiveGame: (game: ActiveGame | null) => void;
+  updateActiveGame: (updates: Partial<ActiveGame>) => void;
+  updatePlayer: (telegramId: number, updates: Partial<Player>) => void;
 
-let deck: Card[] = createDeck();
+  // View actions
+  setView: (view: 'lobby' | 'room') => void;
+  setConnected: (value: boolean) => void;
 
-const drawCard = (faceUp = true): Card => {
-  if (deck.length < 10) {
-    deck = createDeck();
-  }
-  const card = deck.pop()!;
-  card.faceUp = faceUp;
-  return card;
-};
+  // API calls
+  authenticate: (telegramId: number, initData: string) => Promise<boolean>;
+  fetchRooms: () => Promise<void>;
+  createRoom: (name: string, minBet: number, maxBet: number) => Promise<string | null>;
+  joinRoom: (roomId: string, seatNumber: number) => Promise<boolean>;
+  leaveRoom: () => Promise<void>;
+  setReady: () => Promise<void>;
+  placeBet: (amount: number) => Promise<void>;
+  hit: () => Promise<void>;
+  stand: () => Promise<void>;
+  doubleDown: () => Promise<void>;
 
-export const useGameStore = create<GameState>((set, get) => ({
-  currentUser: {
-    id: 'user-1',
-    name: 'Sen',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Player',
-    balance: 2010,
-  },
+  // Timers
+  countdown: number;
+  turnTimer: number;
+  decrementCountdown: () => void;
+  decrementTurnTimer: () => void;
+  setCountdown: (value: number) => void;
+  setTurnTimer: (value: number) => void;
+}
 
-  tables: createInitialTables(),
-  activeTable: null,
+export const useGameStore = create<GameStore>((set, get) => ({
+  // Initial state
+  currentUser: null,
+  isAuthenticated: false,
+  isLoading: true,
+  rooms: [],
+  activeGame: null,
   view: 'lobby',
+  isConnected: false,
+  countdown: 0,
+  turnTimer: 15,
 
+  // Auth actions
+  setCurrentUser: (user) => set({ currentUser: user }),
+  setAuthenticated: (value) => set({ isAuthenticated: value }),
+  setLoading: (value) => set({ isLoading: value }),
+
+  // Room actions
+  setRooms: (rooms) => set({ rooms }),
+  updateRoom: (roomId, updates) => set((state) => ({
+    rooms: state.rooms.map(r => r.id === roomId ? { ...r, ...updates } : r)
+  })),
+  addRoom: (room) => set((state) => ({
+    rooms: [room, ...state.rooms]
+  })),
+  removeRoom: (roomId) => set((state) => ({
+    rooms: state.rooms.filter(r => r.id !== roomId)
+  })),
+
+  // Game actions
+  setActiveGame: (game) => set({ activeGame: game }),
+  updateActiveGame: (updates) => set((state) => ({
+    activeGame: state.activeGame ? { ...state.activeGame, ...updates } : null
+  })),
+  updatePlayer: (telegramId, updates) => set((state) => {
+    if (!state.activeGame) return {};
+    return {
+      activeGame: {
+        ...state.activeGame,
+        players: state.activeGame.players.map(p =>
+          p.telegramId === telegramId ? { ...p, ...updates } : p
+        )
+      }
+    };
+  }),
+
+  // View actions
   setView: (view) => set({ view }),
+  setConnected: (value) => set({ isConnected: value }),
 
-  joinTable: (tableId, seatIndex) => {
-    const { tables, currentUser } = get();
-    const table = tables.find(t => t.id === tableId);
+  // Timer actions
+  setCountdown: (value) => set({ countdown: value }),
+  setTurnTimer: (value) => set({ turnTimer: value }),
+  decrementCountdown: () => set((state) => ({ countdown: Math.max(0, state.countdown - 1) })),
+  decrementTurnTimer: () => set((state) => ({ turnTimer: Math.max(0, state.turnTimer - 1) })),
 
-    if (!table) return;
-    if (table.players.some(p => p.seatIndex === seatIndex)) return;
-    if (table.players.length >= table.maxPlayers) return;
+  // API: Authenticate user
+  authenticate: async (telegramId, initData) => {
+    try {
+      set({ isLoading: true });
 
-    const newPlayer: Player = {
-      id: currentUser.id,
-      name: currentUser.name,
-      avatar: currentUser.avatar,
-      balance: currentUser.balance,
-      seatIndex,
-      cards: [],
-      bet: 0,
-      status: 'waiting',
-      isCurrentUser: true,
-      totalScore: 0,
-      hasInsurance: false,
-    };
-
-    const updatedTable: Table = {
-      ...table,
-      players: [...table.players, newPlayer].sort((a, b) => a.seatIndex - b.seatIndex),
-    };
-
-    set({
-      activeTable: updatedTable,
-      view: 'table',
-      tables: tables.map(t => t.id === tableId ? updatedTable : t),
-    });
-  },
-
-  leaveTable: () => {
-    const { activeTable, tables, currentUser } = get();
-    if (!activeTable) return;
-
-    // Aktif oyundaysa çıkamaz, disconnected olarak işaretle
-    // Status tutarsızlığı düzeltildi: 'dealer-turn' yerine 'dealer_turn' kullanılıyor
-    if (['dealing', 'playing', 'dealer_turn', 'dealer-turn'].includes(activeTable.status)) {
-      const updatedPlayers = activeTable.players.map(p =>
-        p.isCurrentUser ? { ...p, status: 'disconnected' as PlayerStatus } : p
-      );
-
-      const updatedTable = { ...activeTable, players: updatedPlayers };
-
-      set({
-        activeTable: null,
-        view: 'lobby',
-        tables: tables.map(t => t.id === activeTable.id ? updatedTable : t),
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: telegramId,
+          init_data: initData
+        }),
       });
-      return;
-    }
 
-    // Oyun dışındaysa tamamen çık
-    const updatedPlayers = activeTable.players.filter(p => !p.isCurrentUser);
-    const updatedTable = { ...activeTable, players: updatedPlayers };
-
-    set({
-      activeTable: null,
-      view: 'lobby',
-      tables: tables.map(t => t.id === activeTable.id ? updatedTable : t),
-    });
-  },
-
-  setReady: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const updatedPlayers = activeTable.players.map(p =>
-      p.isCurrentUser ? { ...p, status: 'ready' as PlayerStatus } : p
-    );
-
-    const updatedTable = { ...activeTable, players: updatedPlayers };
-
-    // Herkes hazır mı kontrol et
-    const allReady = updatedPlayers.every(p => p.status === 'ready');
-
-    if (allReady && updatedPlayers.length >= 1) {
-      updatedTable.status = 'countdown';
-      updatedTable.countdown = 5;
-    }
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  placeBet: (amount) => {
-    const { activeTable, currentUser } = get();
-    if (!activeTable) return;
-    if (amount > currentUser.balance) return;
-    if (amount < activeTable.minBet || amount > activeTable.maxBet) return;
-
-    const updatedPlayers = activeTable.players.map(p =>
-      p.isCurrentUser ? { ...p, bet: amount, status: 'ready' as PlayerStatus } : p
-    );
-
-    const updatedTable = { ...activeTable, players: updatedPlayers };
-
-    set({
-      activeTable: updatedTable,
-      currentUser: { ...currentUser, balance: currentUser.balance - amount },
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  hit: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const currentPlayer = activeTable.players[activeTable.currentPlayerIndex];
-    if (!currentPlayer || !currentPlayer.isCurrentUser) return;
-
-    const newCard = drawCard();
-    const newCards = [...currentPlayer.cards, newCard];
-    const newScore = calculateHandValue(newCards);
-
-    let newStatus: PlayerStatus = 'playing';
-    if (newScore > 21) newStatus = 'bust';
-    else if (newScore === 21) newStatus = 'stand';
-
-    const updatedPlayers = activeTable.players.map((p, i) =>
-      i === activeTable.currentPlayerIndex
-        ? { ...p, cards: newCards, totalScore: newScore, status: newStatus }
-        : p
-    );
-
-    const updatedTable = { ...activeTable, players: updatedPlayers };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-
-    // Bust veya 21 olduysa sıradaki oyuncuya geç
-    if (newStatus !== 'playing') {
-      setTimeout(() => get().nextPlayer(), 500);
-    }
-  },
-
-  stand: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const updatedPlayers = activeTable.players.map((p, i) =>
-      i === activeTable.currentPlayerIndex
-        ? { ...p, status: 'stand' as PlayerStatus }
-        : p
-    );
-
-    const updatedTable = { ...activeTable, players: updatedPlayers };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-
-    setTimeout(() => get().nextPlayer(), 300);
-  },
-
-  doubleDown: () => {
-    const { activeTable, currentUser } = get();
-    if (!activeTable) return;
-
-    const currentPlayer = activeTable.players[activeTable.currentPlayerIndex];
-    if (!currentPlayer || !currentPlayer.isCurrentUser) return;
-    if (currentPlayer.bet > currentUser.balance) return;
-
-    // Double down için 2 kart kontrolü eklendi
-    if (currentPlayer.cards.length !== 2) return;
-
-    // Blackjack ile double down yapılamaz kontrolü eklendi
-    const currentScore = calculateHandValue(currentPlayer.cards);
-    if (currentScore === 21 && currentPlayer.cards.length === 2) return;
-
-    const newCard = drawCard();
-    const newCards = [...currentPlayer.cards, newCard];
-    const newScore = calculateHandValue(newCards);
-    const newBet = currentPlayer.bet * 2;
-
-    let newStatus: PlayerStatus = 'stand';
-    if (newScore > 21) newStatus = 'bust';
-
-    const updatedPlayers = activeTable.players.map((p, i) =>
-      i === activeTable.currentPlayerIndex
-        ? { ...p, cards: newCards, totalScore: newScore, bet: newBet, status: newStatus }
-        : p
-    );
-
-    const updatedTable = { ...activeTable, players: updatedPlayers };
-
-    set({
-      activeTable: updatedTable,
-      currentUser: { ...currentUser, balance: currentUser.balance - currentPlayer.bet },
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-
-    setTimeout(() => get().nextPlayer(), 500);
-  },
-
-  startCountdown: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const updatedTable = { ...activeTable, status: 'countdown' as TableStatus, countdown: 5 };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  startBetting: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    // Oyuncuları betting moduna geçir ve botlar için otomatik bahis koy
-    const updatedPlayers = activeTable.players.map(p => {
-      if (!p.isCurrentUser) {
-        // Bot için rastgele bahis belirle - BAKİYE KONTROLÜ EKLENDİ
-        const minBet = activeTable.minBet;
-        // Bakiye yetersizse bot bahis koyamaz
-        if (p.balance < minBet) {
-          return {
-            ...p,
-            status: 'spectating' as PlayerStatus,
-            cards: [],
-            totalScore: 0,
-            bet: 0,
-          };
-        }
-        const maxBet = Math.min(activeTable.maxBet, p.balance);
-        const betOptions = [minBet, minBet * 2, minBet * 5, Math.floor(maxBet / 2)].filter(b => b <= maxBet && b >= minBet && b <= p.balance);
-        const randomBet = betOptions[Math.floor(Math.random() * betOptions.length)] || minBet;
-
-        return {
-          ...p,
-          status: 'ready' as PlayerStatus,
-          cards: [],
-          totalScore: 0,
-          bet: randomBet,
-          balance: p.balance - randomBet,
-        };
+      if (!response.ok) {
+        throw new Error('Authentication failed');
       }
-      return {
-        ...p,
-        status: 'betting' as PlayerStatus,
+
+      const data = await response.json();
+
+      if (data.user) {
+        set({
+          currentUser: {
+            id: data.user.id,
+            telegramId: data.user.telegram_id,
+            name: data.user.first_name || data.user.username || 'Oyuncu',
+            username: data.user.username,
+            avatar: data.user.photo_url || '',
+            balance: data.user.chips,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return true;
+      }
+
+      set({ isLoading: false });
+      return false;
+    } catch (error) {
+      console.error('Auth error:', error);
+      set({ isLoading: false });
+      return false;
+    }
+  },
+
+  // API: Fetch rooms
+  fetchRooms: async () => {
+    try {
+      const response = await fetch('/api/rooms');
+      if (!response.ok) throw new Error('Failed to fetch rooms');
+
+      const data = await response.json();
+      const rooms = (data.rooms || []).map((r: DBRoom) => mapDBRoomToRoom(r));
+      set({ rooms });
+    } catch (error) {
+      console.error('Fetch rooms error:', error);
+    }
+  },
+
+  // API: Create room
+  createRoom: async (name, minBet, maxBet) => {
+    const { currentUser } = get();
+    if (!currentUser) return null;
+
+    try {
+      const response = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          min_bet: minBet,
+          max_bet: maxBet,
+          telegram_id: currentUser.telegramId,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to create room');
+
+      const data = await response.json();
+      return data.room?.id || null;
+    } catch (error) {
+      console.error('Create room error:', error);
+      return null;
+    }
+  },
+
+  // API: Join room
+  joinRoom: async (roomId, seatNumber) => {
+    const { currentUser } = get();
+    if (!currentUser) return false;
+
+    try {
+      const response = await fetch('/api/rooms', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'join',
+          room_id: roomId,
+          telegram_id: currentUser.telegramId,
+          seat_number: seatNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Join room error:', error);
+        return false;
+      }
+
+      // Oda bilgilerini al
+      const roomResponse = await fetch(`/api/rooms?id=${roomId}`);
+      if (!roomResponse.ok) return false;
+
+      const roomData = await roomResponse.json();
+      const room = roomData.room;
+
+      // ActiveGame oluştur
+      const players: Player[] = (room.players || []).map((p: DBRoomPlayer) => ({
+        id: String(p.id),
+        telegramId: p.telegram_id,
+        name: p.first_name || p.username || 'Oyuncu',
+        avatar: p.photo_url || '',
+        balance: p.chips || 0,
+        seatNumber: p.seat_number,
         cards: [],
+        bet: 0,
+        status: 'waiting' as const,
+        isCurrentUser: p.telegram_id === currentUser.telegramId,
         totalScore: 0,
-      };
-    });
-
-    const updatedTable: Table = {
-      ...activeTable,
-      status: 'betting',
-      countdown: 10,
-      players: updatedPlayers,
-      dealerCards: [],
-      dealerScore: 0,
-    };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  dealCards: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    deck = createDeck(); // Yeni deste
-
-    // Bet vermeyen oyuncuları spectating yap
-    const playersWithBets = activeTable.players.map(p => {
-      if (p.bet === 0) {
-        return { ...p, status: 'spectating' as PlayerStatus };
-      }
-
-      const cards = [drawCard(), drawCard()];
-      const score = calculateHandValue(cards);
-      const status: PlayerStatus = score === 21 ? 'blackjack' : 'playing';
-
-      return { ...p, cards, totalScore: score, status };
-    });
-
-    // Krupiye kartları
-    const dealerCards = [drawCard(), { ...drawCard(), faceUp: false }];
-    const dealerScore = calculateHandValue(dealerCards);
-
-    // İlk aktif oyuncuyu bul (sağdan başla - en yüksek seatIndex)
-    const activePlayers = playersWithBets.filter(p => p.status === 'playing');
-    const sortedByRightToLeft = [...activePlayers].sort((a, b) => b.seatIndex - a.seatIndex);
-    const firstActiveIndex = sortedByRightToLeft.length > 0
-      ? playersWithBets.findIndex(p => p.id === sortedByRightToLeft[0].id)
-      : -1;
-
-    const updatedTable: Table = {
-      ...activeTable,
-      status: 'playing',
-      players: playersWithBets,
-      dealerCards,
-      dealerScore,
-      currentPlayerIndex: firstActiveIndex,
-      turnTimer: 15,
-      roundNumber: activeTable.roundNumber + 1,
-    };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  nextPlayer: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const currentIndex = activeTable.currentPlayerIndex;
-
-    // Sağdan sola git - seatIndex'i daha düşük olan oyunculara
-    const currentSeatIndex = activeTable.players[currentIndex]?.seatIndex ?? 5;
-
-    // Sıradaki aktif oyuncuyu bul (daha düşük seatIndex)
-    const nextPlayer = activeTable.players
-      .filter(p => p.seatIndex < currentSeatIndex && p.status === 'playing')
-      .sort((a, b) => b.seatIndex - a.seatIndex)[0];
-
-    if (nextPlayer) {
-      const nextIndex = activeTable.players.findIndex(p => p.id === nextPlayer.id);
-
-      const updatedTable = {
-        ...activeTable,
-        currentPlayerIndex: nextIndex,
-        turnTimer: 15,
-      };
+        isTurn: false,
+      }));
 
       set({
-        activeTable: updatedTable,
-        tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
+        activeGame: {
+          id: 0,
+          roomId: room.id,
+          roomName: room.name,
+          status: room.status || 'waiting',
+          minBet: room.min_bet,
+          maxBet: room.max_bet,
+          players,
+          dealerCards: [],
+          dealerScore: 0,
+          currentPlayerIndex: -1,
+          countdown: 0,
+          turnTimer: 15,
+          bettingEndTime: null,
+        },
+        view: 'room',
       });
-    } else {
-      // Aktif oyuncu kalmadı, krupiye oynasın
-      get().dealerPlay();
+
+      return true;
+    } catch (error) {
+      console.error('Join room error:', error);
+      return false;
     }
   },
 
-  dealerPlay: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
+  // API: Leave room
+  leaveRoom: async () => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return;
 
-    // Önce kapalı kartı aç
-    let dealerCards = activeTable.dealerCards.map(c => ({ ...c, faceUp: true }));
-    let dealerScore = calculateHandValue(dealerCards);
-
-    // Krupiye 17'ye kadar çekmeli
-    while (dealerScore < 17) {
-      dealerCards = [...dealerCards, drawCard()];
-      dealerScore = calculateHandValue(dealerCards);
+    try {
+      await fetch('/api/rooms', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'leave',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+        }),
+      });
+    } catch (error) {
+      console.error('Leave room error:', error);
     }
 
-    const updatedTable: Table = {
-      ...activeTable,
-      status: 'dealer_turn',
-      dealerCards,
-      dealerScore,
-      currentPlayerIndex: -1,
-    };
-
     set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-
-    // Sonuçları göster
-    setTimeout(() => get().showResults(), 1500);
-  },
-
-  showResults: () => {
-    const { activeTable, currentUser } = get();
-    if (!activeTable) return;
-
-    const dealerScore = activeTable.dealerScore;
-    const dealerBust = dealerScore > 21;
-    // Dealer blackjack kontrolü eklendi
-    const dealerHasBlackjack = dealerScore === 21 && activeTable.dealerCards.length === 2;
-
-    let balanceChange = 0;
-
-    const updatedPlayers = activeTable.players.map(p => {
-      if (p.status === 'spectating' || p.bet === 0) {
-        return p;
-      }
-
-      let status: PlayerStatus;
-      let winAmount = 0;
-
-      // Oyuncu blackjack kontrolü
-      const playerHasBlackjack = p.status === 'blackjack';
-
-      if (p.status === 'bust') {
-        status = 'lost';
-        winAmount = 0;
-      } else if (playerHasBlackjack && dealerHasBlackjack) {
-        // Her ikisi de blackjack - Push
-        status = 'push';
-        winAmount = p.bet;
-      } else if (playerHasBlackjack) {
-        // Sadece oyuncu blackjack
-        status = 'won';
-        // Blackjack kazancı düzeltildi: Math.floor ile tam sayıya yuvarla
-        winAmount = Math.floor(p.bet * 2.5);
-      } else if (dealerHasBlackjack) {
-        // Sadece dealer blackjack - Oyuncu kaybeder
-        status = 'lost';
-        winAmount = 0;
-      } else if (dealerBust) {
-        status = 'won';
-        winAmount = p.bet * 2;
-      } else if (p.totalScore > dealerScore) {
-        status = 'won';
-        winAmount = p.bet * 2;
-      } else if (p.totalScore === dealerScore) {
-        status = 'push';
-        winAmount = p.bet;
-      } else {
-        status = 'lost';
-        winAmount = 0;
-      }
-
-      if (p.isCurrentUser) {
-        balanceChange = winAmount;
-      }
-
-      return { ...p, status, balance: p.balance + winAmount };
-    });
-
-    const updatedTable: Table = {
-      ...activeTable,
-      status: 'results',
-      players: updatedPlayers,
-    };
-
-    set({
-      activeTable: updatedTable,
-      currentUser: { ...currentUser, balance: currentUser.balance + balanceChange },
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
+      activeGame: null,
+      view: 'lobby',
     });
   },
 
-  resetForNewRound: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
+  // API: Set ready
+  setReady: async () => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return;
 
-    const updatedPlayers = activeTable.players.map(p => ({
-      ...p,
-      cards: [],
-      bet: 0,
-      status: 'waiting' as PlayerStatus,
-      totalScore: 0,
-    }));
-
-    const updatedTable: Table = {
-      ...activeTable,
-      status: 'waiting',
-      players: updatedPlayers,
-      dealerCards: [],
-      dealerScore: 0,
-      currentPlayerIndex: -1,
-      countdown: 0,
-    };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  decrementCountdown: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const newCountdown = activeTable.countdown - 1;
-
-    if (newCountdown <= 0) {
-      if (activeTable.status === 'countdown') {
-        get().startBetting();
-      } else if (activeTable.status === 'betting') {
-        get().dealCards();
-      }
-      return;
+    try {
+      await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ready',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+        }),
+      });
+    } catch (error) {
+      console.error('Set ready error:', error);
     }
-
-    const updatedTable = { ...activeTable, countdown: newCountdown };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
   },
 
-  decrementTurnTimer: () => {
-    const { activeTable } = get();
-    if (!activeTable || activeTable.status !== 'playing') return;
+  // API: Place bet
+  placeBet: async (amount) => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return;
 
-    const newTimer = activeTable.turnTimer - 1;
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bet',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+          amount,
+        }),
+      });
 
-    if (newTimer <= 0) {
-      // Süre doldu, otomatik stand
-      const currentPlayer = activeTable.players[activeTable.currentPlayerIndex];
-      if (currentPlayer) {
-        if (currentPlayer.isCurrentUser) {
-          get().stand();
-        } else {
-          // Bot için otomatik stand
-          const updatedPlayers = activeTable.players.map((p, i) =>
-            i === activeTable.currentPlayerIndex
-              ? { ...p, status: 'stand' as PlayerStatus }
-              : p
-          );
+      if (response.ok) {
+        // Bakiyeyi güncelle
+        set((state) => ({
+          currentUser: state.currentUser ? {
+            ...state.currentUser,
+            balance: state.currentUser.balance - amount
+          } : null
+        }));
+      }
+    } catch (error) {
+      console.error('Place bet error:', error);
+    }
+  },
 
-          const updatedTable = { ...activeTable, players: updatedPlayers };
+  // API: Hit
+  hit: async () => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return;
 
-          set({
-            activeTable: updatedTable,
-            tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-          });
+    try {
+      await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'hit',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+        }),
+      });
+    } catch (error) {
+      console.error('Hit error:', error);
+    }
+  },
 
-          setTimeout(() => get().nextPlayer(), 300);
+  // API: Stand
+  stand: async () => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return;
+
+    try {
+      await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'stand',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+        }),
+      });
+    } catch (error) {
+      console.error('Stand error:', error);
+    }
+  },
+
+  // API: Double down
+  doubleDown: async () => {
+    const { currentUser, activeGame } = get();
+    if (!currentUser || !activeGame) return;
+
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'double',
+          room_id: activeGame.roomId,
+          telegram_id: currentUser.telegramId,
+        }),
+      });
+
+      if (response.ok) {
+        // Ekstra bahis için bakiyeyi güncelle
+        const myPlayer = activeGame.players.find(p => p.isCurrentUser);
+        if (myPlayer) {
+          set((state) => ({
+            currentUser: state.currentUser ? {
+              ...state.currentUser,
+              balance: state.currentUser.balance - myPlayer.bet
+            } : null
+          }));
         }
       }
-      return;
-    }
-
-    const updatedTable = { ...activeTable, turnTimer: newTimer };
-
-    set({
-      activeTable: updatedTable,
-      tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-    });
-  },
-
-  simulateBotActions: () => {
-    const { activeTable } = get();
-    if (!activeTable) return;
-
-    const currentPlayer = activeTable.players[activeTable.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.isCurrentUser || currentPlayer.status !== 'playing') return;
-
-    // Bot stratejisi: 16 ve altında hit, 17 ve üstünde stand
-    if (currentPlayer.totalScore < 17) {
-      // Hit
-      const newCard = drawCard();
-      const newCards = [...currentPlayer.cards, newCard];
-      const newScore = calculateHandValue(newCards);
-
-      let newStatus: PlayerStatus = 'playing';
-      if (newScore > 21) newStatus = 'bust';
-      else if (newScore === 21) newStatus = 'stand';
-
-      const updatedPlayers = activeTable.players.map((p, i) =>
-        i === activeTable.currentPlayerIndex
-          ? { ...p, cards: newCards, totalScore: newScore, status: newStatus }
-          : p
-      );
-
-      const updatedTable = { ...activeTable, players: updatedPlayers };
-
-      set({
-        activeTable: updatedTable,
-        tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-      });
-
-      if (newStatus !== 'playing') {
-        setTimeout(() => get().nextPlayer(), 800);
-      } else {
-        // Tekrar hit yapabilir
-        setTimeout(() => get().simulateBotActions(), 1000);
-      }
-    } else {
-      // Stand
-      const updatedPlayers = activeTable.players.map((p, i) =>
-        i === activeTable.currentPlayerIndex
-          ? { ...p, status: 'stand' as PlayerStatus }
-          : p
-      );
-
-      const updatedTable = { ...activeTable, players: updatedPlayers };
-
-      set({
-        activeTable: updatedTable,
-        tables: get().tables.map(t => t.id === updatedTable.id ? updatedTable : t),
-      });
-
-      setTimeout(() => get().nextPlayer(), 500);
+    } catch (error) {
+      console.error('Double down error:', error);
     }
   },
 }));
