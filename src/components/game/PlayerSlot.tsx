@@ -4,14 +4,13 @@ import type { Player } from '@/types/game';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CardStack } from './PlayingCard';
-import { Plus } from 'lucide-react';
+import { User } from 'lucide-react';
 
 interface PlayerSlotProps {
   player?: Player;
-  seatIndex: number;
+  seatNumber: number;
   isActive: boolean;
   turnTimer?: number;
-  onSit?: () => void;
   isEmpty: boolean;
 }
 
@@ -30,24 +29,23 @@ const statusColors: Record<string, string> = {
   spectating: 'border-gray-600',
 };
 
-export function PlayerSlot({ player, seatIndex, isActive, turnTimer = 15, onSit, isEmpty }: PlayerSlotProps) {
-  // Boş koltuk - Yuvarlak + işareti
+export function PlayerSlot({ player, seatNumber, isActive, turnTimer = 15, isEmpty }: PlayerSlotProps) {
+  // Boş koltuk
   if (isEmpty || !player) {
     return (
-      <button
-        type="button"
-        onClick={onSit}
-        className={cn(
-          'flex items-center justify-center',
-          'w-12 h-12 rounded-full',
-          'border-2 border-dashed border-green-600/50',
-          'hover:border-green-400 hover:bg-green-900/30',
-          'transition-all duration-200',
-          'bg-green-900/20'
-        )}
-      >
-        <Plus className="w-5 h-5 text-green-500" />
-      </button>
+      <div className="flex flex-col items-center gap-1">
+        <div
+          className={cn(
+            'flex items-center justify-center',
+            'w-12 h-12 rounded-full',
+            'border-2 border-dashed border-gray-600/50',
+            'bg-gray-800/30'
+          )}
+        >
+          <User className="w-5 h-5 text-gray-600" />
+        </div>
+        <span className="text-gray-600 text-xs">{seatNumber}</span>
+      </div>
     );
   }
 
@@ -107,6 +105,7 @@ export function PlayerSlot({ player, seatIndex, isActive, turnTimer = 15, onSit,
           borderColor,
           isActive && 'ring-2 ring-green-400 ring-offset-2 ring-offset-transparent'
         )}>
+          {/* Telegram profil fotoğrafı veya fallback */}
           <AvatarImage src={player.avatar} alt={player.name} />
           <AvatarFallback className="bg-gray-700 text-white text-xs">
             {player.name.substring(0, 2).toUpperCase()}
@@ -114,15 +113,31 @@ export function PlayerSlot({ player, seatIndex, isActive, turnTimer = 15, onSit,
         </Avatar>
       </div>
 
-      {/* İsim - sadece kısa */}
+      {/* İsim */}
       <span className="text-white text-xs font-medium truncate max-w-[60px]">
         {player.isCurrentUser ? 'Sen' : player.name}
       </span>
 
-      {/* Bahis miktarı - minimal */}
+      {/* Bahis miktarı */}
       {player.bet > 0 && (
         <div className="flex items-center gap-1 bg-yellow-500/20 px-2 py-0.5 rounded-full">
           <span className="text-yellow-400 text-xs font-bold">{player.bet}</span>
+        </div>
+      )}
+
+      {/* Status badge */}
+      {(player.status === 'won' || player.status === 'lost' || player.status === 'push' || player.status === 'blackjack') && (
+        <div className={cn(
+          'px-2 py-0.5 rounded-full text-xs font-bold',
+          player.status === 'won' && 'bg-green-600 text-white',
+          player.status === 'lost' && 'bg-red-600 text-white',
+          player.status === 'push' && 'bg-gray-600 text-white',
+          player.status === 'blackjack' && 'bg-yellow-500 text-black'
+        )}>
+          {player.status === 'won' && 'Kazandı'}
+          {player.status === 'lost' && 'Kaybetti'}
+          {player.status === 'push' && 'Berabere'}
+          {player.status === 'blackjack' && 'BJ!'}
         </div>
       )}
     </div>
