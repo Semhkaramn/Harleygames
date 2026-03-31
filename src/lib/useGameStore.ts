@@ -194,6 +194,14 @@ export function useGameStore() {
   // Double down
   const doubleDown = useCallback((playerId: string) => {
     setGameState((prev) => {
+      const player = prev.players.find((p) => p.id === playerId);
+
+      // Double down için kontroller
+      if (!player) return prev;
+      if (player.cards.length !== 2) return prev; // Sadece 2 kartla yapılabilir
+      if (isBlackjack(player.cards)) return prev; // Blackjack ile yapılamaz
+      if (player.chips < player.bet) return prev; // Yeterli bakiye kontrolü
+
       const deck = [...prev.deck];
       const newCard = deck.pop()!;
 
@@ -257,6 +265,15 @@ export function useGameStore() {
         const playerHasBlackjack = isBlackjack(player.cards);
         const dealerHasBlackjack = isBlackjack(dealerCards);
 
+        if (playerHasBlackjack && dealerHasBlackjack) {
+          // Her ikisi de blackjack - Push
+          return {
+            ...player,
+            status: 'push' as const,
+            chips: player.chips + player.bet,
+          };
+        }
+
         if (playerHasBlackjack && !dealerHasBlackjack) {
           // Blackjack: bahis geri + bahsin 1.5 katı = toplam 2.5x
           return {
@@ -264,6 +281,11 @@ export function useGameStore() {
             status: 'blackjack' as const,
             chips: player.chips + Math.floor(player.bet * 2.5),
           };
+        }
+
+        if (dealerHasBlackjack && !playerHasBlackjack) {
+          // Sadece dealer blackjack - Oyuncu kaybeder
+          return { ...player, status: 'lose' as const };
         }
 
         if (dealerScore > 21) {
