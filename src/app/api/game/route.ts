@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       game: {
         ...game,
-        players: players.map(p => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        players: players.map((p: any) => ({
           id: p.id.toString(),
           telegramId: p.telegram_id,
           name: p.first_name || p.username || 'Player',
