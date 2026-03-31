@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createUser, getUser, initializeDatabase } from '@/lib/db';
 import crypto from 'crypto';
 
+// Veritabanı bağlantısı kontrolü
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('CRITICAL: DATABASE_URL is not configured!');
+}
+
 // Telegram initData doğrulama
 function verifyTelegramAuth(initData: string, botToken: string): boolean {
   if (!initData || !botToken) return false;
