@@ -63,6 +63,20 @@ export interface Room {
   status: 'waiting' | 'playing';
 }
 
+// Tournament Types
+export interface Tournament {
+  id: string;
+  name: string;
+  entryFee: number;
+  prizePool: number;
+  players: number;
+  maxPlayers: number;
+  status: 'registering' | 'running' | 'finished';
+  startTime: Date;
+  rounds: number;
+  currentRound: number;
+}
+
 // Utility Functions
 export function createDeck(): Card[] {
   const deck: Card[] = [];
@@ -89,12 +103,32 @@ export function getCardValue(card: Card): number {
   return parseInt(card.rank, 10);
 }
 
-export function calculateHandValue(cards: Card[]): number {
+export function calculateHandValue(cards: Card[], ignoreHiddenCards = true): number {
   let value = 0;
   let aces = 0;
 
   for (const card of cards) {
-    if (!card.faceUp) continue;
+    // Eğer ignoreHiddenCards true ve kart kapalıysa atla (dealer için)
+    if (ignoreHiddenCards && !card.faceUp) continue;
+    value += getCardValue(card);
+    if (card.rank === 'A') aces++;
+  }
+
+  // As değerini 11'den 1'e düşür, bust'ı önlemek için
+  while (value > 21 && aces > 0) {
+    value -= 10;
+    aces--;
+  }
+
+  return value;
+}
+
+// Tüm kartları hesapla (kapalı olanlar dahil) - oyun sonu için
+export function calculateFullHandValue(cards: Card[]): number {
+  let value = 0;
+  let aces = 0;
+
+  for (const card of cards) {
     value += getCardValue(card);
     if (card.rank === 'A') aces++;
   }
@@ -108,11 +142,13 @@ export function calculateHandValue(cards: Card[]): number {
 }
 
 export function isBlackjack(cards: Card[]): boolean {
-  return cards.length === 2 && calculateHandValue(cards) === 21;
+  if (cards.length !== 2) return false;
+  // Blackjack kontrolü için tüm kartları hesapla
+  return calculateFullHandValue(cards) === 21;
 }
 
 export function isBust(cards: Card[]): boolean {
-  return calculateHandValue(cards) > 21;
+  return calculateFullHandValue(cards) > 21;
 }
 
 // Avatar options
