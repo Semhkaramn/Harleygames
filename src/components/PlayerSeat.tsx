@@ -45,25 +45,25 @@ export function PlayerSeat({
         style={{ left: position.x, top: position.y }}
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: seatNumber * 0.1 }}
+        transition={{ delay: seatNumber * 0.05 }}
       >
         <motion.button
           type="button"
           onClick={onSeatClick}
-          className="w-16 h-16 md:w-20 md:h-20 rounded-full border-2 border-dashed border-emerald-600/40 bg-emerald-900/10 flex items-center justify-center backdrop-blur-sm group relative overflow-hidden"
+          className="w-12 h-12 rounded-full border-2 border-dashed border-emerald-600/50 bg-emerald-900/20 flex items-center justify-center backdrop-blur-sm group relative overflow-hidden"
           whileHover={{
-            scale: 1.05,
-            borderColor: 'rgba(16, 185, 129, 0.6)',
-            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+            scale: 1.1,
+            borderColor: 'rgba(16, 185, 129, 0.8)',
+            backgroundColor: 'rgba(16, 185, 129, 0.2)',
           }}
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.9 }}
         >
           {/* Pulse effect */}
           <motion.div
             className="absolute inset-0 rounded-full bg-emerald-500/10"
             animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.5, 0, 0.5],
+              scale: [1, 1.3, 1],
+              opacity: [0.3, 0, 0.3],
             }}
             transition={{
               duration: 2,
@@ -73,14 +73,8 @@ export function PlayerSeat({
           />
 
           <div className="text-center relative z-10">
-            <motion.span
-              className="text-xl md:text-2xl text-emerald-500/70 block"
-              animate={{ rotate: [0, 180, 360] }}
-              transition={{ duration: 10, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
-            >
-              +
-            </motion.span>
-            <p className="text-[8px] md:text-[10px] text-emerald-500/70 mt-0.5 font-medium">
+            <span className="text-lg text-emerald-500/80 block">+</span>
+            <p className="text-[7px] text-emerald-500/80 font-medium">
               Otur
             </p>
           </div>
@@ -104,16 +98,16 @@ export function PlayerSeat({
       animate={{ opacity: isSkipped ? 0.5 : 1, scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
     >
-      <div className={`relative ${isCurrentUser ? 'scale-105' : ''}`}>
+      <div className={`relative ${isCurrentUser ? 'scale-110' : ''}`}>
         {/* Glow effect for turn */}
         <AnimatePresence>
           {player.isTurn && (
             <motion.div
-              className="absolute inset-0 rounded-full -m-2"
+              className="absolute inset-0 rounded-full -m-3"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{
                 opacity: [0.4, 0.8, 0.4],
-                scale: [1, 1.1, 1],
+                scale: [1, 1.2, 1],
               }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{
@@ -122,7 +116,7 @@ export function PlayerSeat({
                 ease: 'easeInOut',
               }}
               style={{
-                background: `radial-gradient(circle, ${status.glow || 'rgba(16, 185, 129, 0.4)'} 0%, transparent 70%)`,
+                background: `radial-gradient(circle, ${status.glow || 'rgba(16, 185, 129, 0.5)'} 0%, transparent 70%)`,
               }}
             />
           )}
@@ -132,12 +126,12 @@ export function PlayerSeat({
         <AnimatePresence>
           {needsBet && isCurrentUser && (
             <motion.div
-              className="absolute -top-2 left-1/2 -translate-x-1/2 z-20"
+              className="absolute -top-3 left-1/2 -translate-x-1/2 z-20"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 5 }}
             >
-              <div className="bg-amber-500 text-black text-[8px] font-bold px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
+              <div className="bg-amber-500 text-black text-[7px] font-bold px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap shadow-lg">
                 Bahis Yap!
               </div>
             </motion.div>
@@ -151,26 +145,26 @@ export function PlayerSeat({
               className="absolute inset-0 rounded-full -m-4"
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{
-                opacity: [0, 1, 0],
+                opacity: [0, 0.8, 0],
                 scale: [1, 1.5, 2],
               }}
               transition={{
-                duration: 1,
+                duration: 1.2,
                 repeat: Number.POSITIVE_INFINITY,
               }}
               style={{
-                background: `radial-gradient(circle, ${status.glow || 'rgba(34, 197, 94, 0.3)'} 0%, transparent 70%)`,
+                background: `radial-gradient(circle, ${status.glow || 'rgba(34, 197, 94, 0.4)'} 0%, transparent 70%)`,
               }}
             />
           )}
         </AnimatePresence>
 
-        {/* Cards */}
+        {/* Cards - positioned to the side based on seat position */}
         <AnimatePresence>
           {player.cards.length > 0 && (
             <motion.div
-              className="absolute -top-24 left-1/2 -translate-x-1/2 flex -space-x-3"
-              initial={{ opacity: 0, y: -20 }}
+              className="absolute -top-16 left-1/2 -translate-x-1/2 flex -space-x-4"
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
             >
               {player.cards.map((card, index) => (
@@ -179,7 +173,7 @@ export function PlayerSeat({
                   card={card}
                   index={index}
                   size="xs"
-                  flipDelay={index * 200}
+                  flipDelay={index * 150}
                 />
               ))}
             </motion.div>
@@ -190,13 +184,13 @@ export function PlayerSeat({
         <AnimatePresence>
           {player.cards.length > 0 && (
             <motion.div
-              className={`absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+              className={`absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-bold border shadow-lg ${
                 handValue > 21
-                  ? 'bg-red-500/90 border-red-400/50'
+                  ? 'bg-red-500/90 border-red-400/50 text-white'
                   : handValue === 21
-                  ? 'bg-amber-500/90 border-amber-400/50'
-                  : 'bg-black/80 border-white/10'
-              } text-white shadow-lg`}
+                  ? 'bg-amber-500/90 border-amber-400/50 text-white'
+                  : 'bg-black/90 border-white/20 text-white'
+              }`}
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{
                 opacity: 1,
@@ -213,15 +207,15 @@ export function PlayerSeat({
         <div className="flex flex-col items-center">
           {/* Avatar with ring - supports Telegram photo */}
           <motion.div
-            className={`relative w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300
-              ${player.isTurn ? 'ring-2 ring-emerald-400' : ''}
+            className={`relative w-10 h-10 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300
+              ${player.isTurn ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-black' : ''}
               ${isCurrentUser ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-black' : ''}
               ${isSkipped ? 'opacity-50' : ''}
             `}
             style={{
               boxShadow: player.isTurn
-                ? '0 0 20px rgba(16, 185, 129, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.2)'
-                : 'inset 0 2px 4px rgba(255, 255, 255, 0.1), inset 0 -2px 4px rgba(0, 0, 0, 0.3)',
+                ? '0 0 20px rgba(16, 185, 129, 0.6)'
+                : '0 4px 12px rgba(0, 0, 0, 0.4)',
             }}
             animate={isWinner ? {
               rotate: [0, -5, 5, -5, 5, 0],
@@ -237,45 +231,44 @@ export function PlayerSeat({
                 fill
                 className="object-cover"
                 onError={(e) => {
-                  // Fallback to avatar if photo fails to load
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
               />
             ) : (
-              <div className={`absolute inset-0 flex items-center justify-center text-xl md:text-2xl
-                ${player.isTurn ? 'bg-gradient-to-br from-emerald-500 to-emerald-700' : 'bg-gradient-to-br from-gray-700 to-gray-900'}
+              <div className={`absolute inset-0 flex items-center justify-center text-lg
+                ${player.isTurn ? 'bg-gradient-to-br from-emerald-500 to-emerald-700' : 'bg-gradient-to-br from-gray-600 to-gray-800'}
               `}>
                 {player.avatar}
               </div>
             )}
 
-            {/* Border gradient */}
+            {/* Border */}
             <div className={`absolute inset-0 rounded-full border-2 ${
-              player.isTurn ? 'border-emerald-300/50' : 'border-gray-600/50'
+              player.isTurn ? 'border-emerald-300/60' : 'border-gray-500/40'
             }`} />
 
             {/* Current user indicator */}
             {isCurrentUser && (
               <motion.div
-                className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center"
+                className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 border border-black flex items-center justify-center"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 500 }}
               >
-                <span className="text-[6px]">SEN</span>
+                <span className="text-[5px] font-bold text-black">SEN</span>
               </motion.div>
             )}
           </motion.div>
 
           {/* Name & Status */}
           <div className="mt-1 text-center">
-            <p className="text-[10px] md:text-xs font-semibold text-white truncate max-w-[70px] drop-shadow-md">
+            <p className="text-[9px] font-semibold text-white truncate max-w-[60px] drop-shadow-md">
               {player.name}
             </p>
             <motion.p
-              className={`text-[8px] md:text-[10px] font-medium ${status.color} mt-0.5`}
+              className={`text-[7px] font-medium ${status.color} mt-0.5`}
               animate={player.isTurn ? {
-                opacity: [0.7, 1, 0.7],
+                opacity: [0.6, 1, 0.6],
               } : undefined}
               transition={player.isTurn ? {
                 duration: 1.5,
@@ -291,11 +284,11 @@ export function PlayerSeat({
             <motion.button
               type="button"
               onClick={onLeave}
-              className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white z-10"
-              whileHover={{ scale: 1.1 }}
+              className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white z-10 shadow-md"
+              whileHover={{ scale: 1.2 }}
               whileTap={{ scale: 0.9 }}
             >
-              X
+              ✕
             </motion.button>
           )}
 
@@ -303,10 +296,10 @@ export function PlayerSeat({
           <AnimatePresence>
             {player.bet > 0 && (
               <motion.div
-                className="absolute -bottom-12 left-1/2 -translate-x-1/2"
+                className="absolute -bottom-10 left-1/2 -translate-x-1/2"
                 initial={{ opacity: 0, scale: 0.5 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.5, y: -20 }}
+                exit={{ opacity: 0, scale: 0.5, y: -10 }}
                 transition={{ type: 'spring', stiffness: 300 }}
               >
                 <ChipStack total={player.bet} maxDisplay={3} animate />
