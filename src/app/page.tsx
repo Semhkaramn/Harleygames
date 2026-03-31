@@ -174,6 +174,32 @@ export default function Home() {
     }
 
     try {
+      // Önce odadaki boş koltukları kontrol et
+      const roomResponse = await fetch(`/api/rooms?id=${roomId}`);
+      const roomData = await roomResponse.json();
+
+      if (!roomData.room) {
+        showNotification('error', 'Oda bulunamadı');
+        return;
+      }
+
+      // Dolu koltukları bul
+      const occupiedSeats = (roomData.room.players || []).map((p: { seat_number: number }) => p.seat_number);
+
+      // İlk boş koltuğu bul (1-6 arası)
+      let availableSeat = -1;
+      for (let i = 1; i <= 6; i++) {
+        if (!occupiedSeats.includes(i)) {
+          availableSeat = i;
+          break;
+        }
+      }
+
+      if (availableSeat === -1) {
+        showNotification('error', 'Oda dolu');
+        return;
+      }
+
       const response = await fetch('/api/rooms', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -181,13 +207,13 @@ export default function Home() {
           action: 'join',
           room_id: roomId,
           telegram_id: dbUser.telegram_id,
-          seat_number: 0,
+          seat_number: availableSeat,
         }),
       });
 
       const data = await response.json();
 
-      if (data.success || data.error === 'Seat already taken') {
+      if (data.success) {
         setSelectedRoomId(roomId);
         setCurrentView('game');
         hapticFeedback('medium');
