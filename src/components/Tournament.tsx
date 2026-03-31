@@ -613,7 +613,7 @@ export function TournamentList({ onBack }: TournamentListProps) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
               className="glass-strong rounded-2xl p-6 max-w-md w-full"
             >
               <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2" style={{ fontFamily: "'Playfair Display', serif" }}>
