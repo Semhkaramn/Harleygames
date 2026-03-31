@@ -42,6 +42,7 @@ export function TableView() {
     }, 1000);
 
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGame?.status, countdown, decrementCountdown]);
 
   // Turn timer
@@ -55,6 +56,7 @@ export function TableView() {
     }, 1000);
 
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGame?.status, turnTimer, decrementTurnTimer]);
 
   const handleLeave = useCallback(async () => {
