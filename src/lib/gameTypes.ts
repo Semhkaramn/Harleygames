@@ -25,12 +25,13 @@ export interface Player {
   id: string;
   name: string;
   avatar: string;
+  photoUrl?: string;
   chips: number;
   bet: number;
   cards: Card[];
   isActive: boolean;
   isTurn: boolean;
-  status: 'waiting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'win' | 'lose' | 'push';
+  status: 'waiting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'win' | 'lose' | 'push' | 'skipped';
   seatNumber: number;
 }
 
