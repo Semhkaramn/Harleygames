@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Lobby } from '@/components/Lobby';
 import { GameTable } from '@/components/GameTable';
+import { Leaderboard } from '@/components/Leaderboard';
 import { useUserStore, useUIStore, useRoomStore } from '@/lib/store';
 import {
   initTelegramWebApp,
@@ -14,11 +15,25 @@ import {
 } from '@/lib/telegram';
 
 export default function Home() {
-  const { currentView, setCurrentView, showNotification, notification, clearNotification } = useUIStore();
-  const { telegramUser, dbUser, isLoading, setTelegramUser, setDbUser, setLoading } = useUserStore();
+  const { currentView, setCurrentView, showNotification, notification, clearNotification, showBonusModal, setShowBonusModal } = useUIStore();
+  const { telegramUser, dbUser, isLoading, setTelegramUser, setDbUser, setLoading, updateChips } = useUserStore();
   const { setRooms } = useRoomStore();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [bonusStatus, setBonusStatus] = useState<{ available: boolean; remaining_hours?: number } | null>(null);
+
+  // URL parametrelerini kontrol et
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'leaderboard') {
+        setCurrentView('leaderboard');
+      }
+      if (params.get('bonus') === 'true') {
+        setShowBonusModal(true);
+      }
+    }
+  }, [setCurrentView, setShowBonusModal]);
 
   // Telegram WebApp başlat ve kullanıcıyı authenticate et
   useEffect(() => {
@@ -57,6 +72,9 @@ export default function Home() {
         if (data.success && data.user) {
           setDbUser(data.user);
           hapticFeedback('success');
+
+          // Bonus durumunu kontrol et
+          checkBonusStatus(data.user.telegram_id);
         } else {
           console.error('Auth failed:', data.error);
           setLoading(false);
@@ -72,6 +90,45 @@ export default function Home() {
 
     init();
   }, [setTelegramUser, setDbUser, setLoading]);
+
+  // Bonus durumunu kontrol et
+  const checkBonusStatus = async (telegramId: number) => {
+    try {
+      const response = await fetch(`/api/bonus?telegram_id=${telegramId}`);
+      const data = await response.json();
+      setBonusStatus(data);
+    } catch (error) {
+      console.error('Bonus check error:', error);
+    }
+  };
+
+  // Bonus al
+  const claimBonus = async () => {
+    if (!dbUser) return;
+
+    try {
+      const response = await fetch('/api/bonus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: dbUser.telegram_id }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        updateChips(data.amount);
+        showNotification('success', `${data.amount} chip bonus alındı!`);
+        setBonusStatus({ available: false, remaining_hours: 24 });
+        hapticFeedback('success');
+      } else {
+        showNotification('error', data.error || 'Bonus alınamadı');
+      }
+    } catch (error) {
+      showNotification('error', 'Bağlantı hatası');
+    } finally {
+      setShowBonusModal(false);
+    }
+  };
 
   // Odaları yükle
   const fetchRooms = useCallback(async () => {
@@ -215,12 +272,60 @@ export default function Home() {
         </div>
       )}
 
+      {/* Bonus Modal */}
+      {showBonusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="glass rounded-2xl p-6 max-w-sm w-[90%] animate-slide-up">
+            <div className="text-center">
+              <div className="text-5xl mb-4">🎁</div>
+              <h3 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
+                Günlük Bonus
+              </h3>
+
+              {bonusStatus?.available ? (
+                <>
+                  <p className="text-gray-400 mb-4">1000 chip bonus seni bekliyor!</p>
+                  <button
+                    type="button"
+                    onClick={claimBonus}
+                    className="btn-gold px-8 py-3 w-full"
+                  >
+                    Bonus Al
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-400 mb-4">
+                    Sonraki bonus: {bonusStatus?.remaining_hours || 24} saat sonra
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowBonusModal(false)}
+                    className="btn-secondary px-8 py-3 w-full"
+                  >
+                    Tamam
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowBonusModal(false)}
+                className="mt-3 text-gray-500 text-sm hover:text-white transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Header
         currentView={currentView}
         userChips={dbUser?.chips || 0}
         userName={dbUser?.first_name || telegramUser?.first_name || ''}
         userAvatar={dbUser?.avatar || '🎭'}
-        onBack={currentView === 'game' ? handleBackToLobby : undefined}
+        onBack={currentView !== 'lobby' ? handleBackToLobby : undefined}
       />
 
       <div className="max-w-5xl mx-auto px-4 py-6">
@@ -253,17 +358,17 @@ export default function Home() {
                 <div className="text-2xl font-bold text-white">{dbUser?.total_games || 0}</div>
                 <div className="text-xs text-gray-500 mt-1">Toplam Oyun</div>
               </div>
-              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
-                <div className="text-3xl mb-2">📊</div>
-                <div className="text-2xl font-bold text-amber-400">
-                  {dbUser?.total_games ? `%${Math.round((dbUser.total_wins / dbUser.total_games) * 100)}` : '%0'}
+              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform cursor-pointer" onClick={() => setShowBonusModal(true)}>
+                <div className="text-3xl mb-2">🎁</div>
+                <div className={`text-2xl font-bold ${bonusStatus?.available ? 'text-amber-400 animate-pulse' : 'text-gray-500'}`}>
+                  {bonusStatus?.available ? 'Hazır!' : `${bonusStatus?.remaining_hours || '?'}s`}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">Başarı Oranı</div>
+                <div className="text-xs text-gray-500 mt-1">Bonus</div>
               </div>
             </div>
 
-            {/* Create Room Button */}
-            <div className="flex justify-center mb-8">
+            {/* Action Buttons */}
+            <div className="flex flex-wrap justify-center gap-3 mb-8">
               <button
                 type="button"
                 onClick={handleCreateRoom}
@@ -272,6 +377,14 @@ export default function Home() {
               >
                 <span className="text-xl">+</span>
                 Yeni Oda Oluştur
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentView('leaderboard')}
+                className="btn-secondary text-lg px-8 py-4 flex items-center gap-2"
+              >
+                <span className="text-xl">🏆</span>
+                Liderlik Tablosu
               </button>
             </div>
 
@@ -282,6 +395,12 @@ export default function Home() {
             )}
 
             <Lobby onJoinRoom={handleJoinRoom} onCreateRoom={handleCreateRoom} />
+          </div>
+        )}
+
+        {currentView === 'leaderboard' && (
+          <div className="animate-fade-in">
+            <Leaderboard />
           </div>
         )}
 
