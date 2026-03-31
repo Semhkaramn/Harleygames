@@ -5,7 +5,7 @@ import { useGameStore, calculateHandValue } from '@/store/gameStore';
 import { LobbyView } from '@/components/game/LobbyView';
 import { TableView } from '@/components/game/TableView';
 import { getTelegramUser, getTelegramWebApp, initTelegramWebApp, isInTelegram } from '@/lib/telegram';
-import type { Player, Card } from '@/types/game';
+import type { Player, Card, Room } from '@/types/game';
 
 interface RoomData {
   id: string;
@@ -14,8 +14,9 @@ interface RoomData {
   max_bet: number;
   max_players?: number;
   status: string;
-  created_by: string;
-  player_count: string;
+  created_by: string | number;
+  player_count: string | number;
+  players?: GamePlayerData[];
 }
 
 interface GamePlayerData {
@@ -24,6 +25,7 @@ interface GamePlayerData {
   telegram_id?: number;
   name?: string;
   first_name?: string;
+  username?: string;
   avatar?: string;
   photo_url?: string;
   balance?: number;
@@ -63,6 +65,7 @@ export default function Home() {
   } = useGameStore();
 
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Telegram WebApp başlat ve kullanıcıyı al
@@ -121,11 +124,57 @@ export default function Home() {
     initAuth();
   }, [setCurrentUser, setAuthenticated, setLoading]);
 
+  // Helper: Map player data
+  const mapPlayerData = useCallback((p: GamePlayerData): Player => ({
+    id: String(p.id),
+    telegramId: p.telegramId || p.telegram_id || 0,
+    name: p.name || p.first_name || p.username || 'Oyuncu',
+    avatar: p.avatar || p.photo_url || '',
+    balance: p.balance || p.chips || 0,
+    seatNumber: p.seatNumber || p.seat_number || 0,
+    cards: p.cards || [],
+    bet: p.bet || 0,
+    status: (p.status || 'waiting') as Player['status'],
+    isCurrentUser: (p.telegramId || p.telegram_id) === currentUser?.telegramId,
+    totalScore: p.cards ? calculateHandValue(p.cards) : 0,
+    isTurn: p.isTurn || p.is_turn || false,
+  }), [currentUser?.telegramId]);
+
+  // Helper: Map room data
+  const mapRoomData = useCallback((r: RoomData): Room => ({
+    id: r.id,
+    name: r.name,
+    minBet: r.min_bet,
+    maxBet: r.max_bet,
+    maxPlayers: r.max_players || 6,
+    status: r.status as Room['status'],
+    createdBy: typeof r.created_by === 'string' ? parseInt(r.created_by) : r.created_by,
+    playerCount: typeof r.player_count === 'string' ? parseInt(r.player_count) : r.player_count,
+    players: (r.players || []).map(p => ({
+      id: String(p.id),
+      telegramId: p.telegramId || p.telegram_id || 0,
+      name: p.name || p.first_name || p.username || 'Oyuncu',
+      avatar: p.avatar || p.photo_url || '',
+      balance: p.balance || p.chips || 0,
+      seatNumber: p.seatNumber || p.seat_number || 0,
+      cards: [],
+      bet: 0,
+      status: 'waiting' as const,
+      isCurrentUser: (p.telegramId || p.telegram_id) === currentUser?.telegramId,
+      totalScore: 0,
+      isTurn: false,
+    })),
+  }), [currentUser?.telegramId]);
+
   // SSE bağlantısı
   const connectSSE = useCallback(() => {
     if (!currentUser) return;
 
-    // Önceki bağlantıyı kapat
+    // Önceki bağlantıyı ve timeout'u temizle
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
@@ -133,6 +182,7 @@ export default function Home() {
     const roomId = activeGame?.roomId || 'lobby';
     const url = `/api/sse?room_id=${roomId}&telegram_id=${currentUser.telegramId}`;
 
+    console.log('SSE connecting to:', url);
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 
@@ -145,12 +195,13 @@ export default function Home() {
       console.error('SSE error:', error);
       setConnected(false);
 
-      // 3 saniye sonra yeniden bağlan
-      setTimeout(() => {
+      // 2 saniye sonra yeniden bağlan
+      reconnectTimeoutRef.current = setTimeout(() => {
         if (eventSourceRef.current === eventSource) {
+          console.log('SSE reconnecting...');
           connectSSE();
         }
-      }, 3000);
+      }, 2000);
     };
 
     // Connected event
@@ -163,64 +214,52 @@ export default function Home() {
       // Bağlantı canlı
     });
 
-    // Rooms update (lobby)
+    // Rooms update (lobby) - Artık tam veri ile geliyor
     eventSource.addEventListener('rooms_update', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      if (data.rooms) {
-        const rooms = data.rooms.map((r: RoomData) => ({
-          id: r.id,
-          name: r.name,
-          minBet: r.min_bet,
-          maxBet: r.max_bet,
-          maxPlayers: r.max_players || 6,
-          status: r.status,
-          createdBy: r.created_by,
-          playerCount: parseInt(r.player_count) || 0,
-          players: [],
-        }));
-        setRooms(rooms);
+      try {
+        const data = JSON.parse((e as MessageEvent).data);
+        console.log('Rooms update received:', data);
+        if (data.rooms && Array.isArray(data.rooms)) {
+          const rooms = data.rooms.map((r: RoomData) => mapRoomData(r));
+          setRooms(rooms);
+        }
+      } catch (error) {
+        console.error('Error parsing rooms_update:', error);
       }
     });
 
     // Game update (room)
     eventSource.addEventListener('game_update', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      if (data.game && activeGame) {
-        const game = data.game;
+      try {
+        const data = JSON.parse((e as MessageEvent).data);
+        console.log('Game update received:', data);
 
-        // Oyuncuları map et
-        const players: Player[] = (game.players || []).map((p: GamePlayerData) => ({
-          id: String(p.id),
-          telegramId: p.telegramId || p.telegram_id,
-          name: p.name || p.first_name || 'Oyuncu',
-          avatar: p.avatar || p.photo_url || '',
-          balance: p.balance || p.chips || 0,
-          seatNumber: p.seatNumber || p.seat_number,
-          cards: p.cards || [],
-          bet: p.bet || 0,
-          status: p.status || 'waiting',
-          isCurrentUser: (p.telegramId || p.telegram_id) === currentUser?.telegramId,
-          totalScore: p.cards ? calculateHandValue(p.cards) : 0,
-          isTurn: p.isTurn || p.is_turn || false,
-        }));
+        if (data.game && activeGame) {
+          const game = data.game;
 
-        updateActiveGame({
-          id: game.id,
-          status: game.status,
-          players,
-          dealerCards: game.dealer_cards || [],
-          dealerScore: game.dealer_score || 0,
-          currentPlayerIndex: game.current_player_index ?? -1,
-          bettingEndTime: game.betting_end_time,
-        });
+          // Oyuncuları map et
+          const players: Player[] = (game.players || []).map(mapPlayerData);
 
-        // Countdown ve timer güncelle
-        if (data.countdown !== undefined) {
-          setCountdown(data.countdown);
+          updateActiveGame({
+            id: game.id || activeGame.id,
+            status: game.status,
+            players,
+            dealerCards: game.dealer_cards || [],
+            dealerScore: game.dealer_score || 0,
+            currentPlayerIndex: game.current_player_index ?? -1,
+            bettingEndTime: game.betting_end_time,
+          });
+
+          // Countdown ve timer güncelle
+          if (data.countdown !== undefined) {
+            setCountdown(data.countdown);
+          }
+          if (data.turnTimer !== undefined) {
+            setTurnTimer(data.turnTimer);
+          }
         }
-        if (data.turnTimer !== undefined) {
-          setTurnTimer(data.turnTimer);
-        }
+      } catch (error) {
+        console.error('Error parsing game_update:', error);
       }
     });
 
@@ -228,33 +267,41 @@ export default function Home() {
     eventSource.addEventListener('player_joined', (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       console.log('Player joined:', data);
-      // Game update ile gelecek
     });
 
     // Player left
     eventSource.addEventListener('player_left', (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       console.log('Player left:', data);
-      // Game update ile gelecek
+    });
+
+    // Seat changed
+    eventSource.addEventListener('seat_changed', (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      console.log('Seat changed:', data);
     });
 
     // Game results
     eventSource.addEventListener('game_results', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      console.log('Game results:', data);
+      try {
+        const data = JSON.parse((e as MessageEvent).data);
+        console.log('Game results:', data);
 
-      if (data.results && activeGame && currentUser) {
-        // Bakiyeyi güncelle
-        const myResult = data.results.find((r: GameResultData) =>
-          r.telegramId === currentUser.telegramId || r.telegram_id === currentUser.telegramId
-        );
+        if (data.results && activeGame && currentUser) {
+          // Bakiyeyi güncelle
+          const myResult = data.results.find((r: GameResultData) =>
+            r.telegramId === currentUser.telegramId || r.telegram_id === currentUser.telegramId
+          );
 
-        if (myResult && myResult.winAmount !== undefined) {
-          setCurrentUser({
-            ...currentUser,
-            balance: currentUser.balance + myResult.winAmount,
-          });
+          if (myResult && myResult.winAmount !== undefined) {
+            setCurrentUser({
+              ...currentUser,
+              balance: currentUser.balance + myResult.winAmount,
+            });
+          }
         }
+      } catch (error) {
+        console.error('Error parsing game_results:', error);
       }
     });
 
@@ -262,14 +309,12 @@ export default function Home() {
     eventSource.addEventListener('room_created', (e) => {
       const data = JSON.parse((e as MessageEvent).data);
       console.log('Room created:', data);
-      // Rooms update ile gelecek
     });
 
     return () => {
       eventSource.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.telegramId, activeGame?.roomId, setConnected, setRooms, updateActiveGame, setCountdown, setTurnTimer, setCurrentUser]);
+  }, [currentUser, activeGame?.roomId, setConnected, setRooms, updateActiveGame, setCountdown, setTurnTimer, setCurrentUser, mapPlayerData, mapRoomData]);
 
   // SSE bağlantısını yönet
   useEffect(() => {
@@ -283,12 +328,14 @@ export default function Home() {
     }
 
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, currentUser?.telegramId, activeGame?.roomId, view, connectSSE, fetchRooms]);
 
   // Yükleniyor
