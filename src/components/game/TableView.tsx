@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
-import { useGameStore } from '@/store/gameStore';
+import { useEffect, useCallback, useState } from 'react';
+import { useGameStore, calculateHandValue } from '@/store/gameStore';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dealer } from './Dealer';
@@ -10,13 +10,16 @@ import { BettingPanel } from './BettingPanel';
 import { GameActions } from './GameActions';
 import { ResultsPanel } from './ResultsPanel';
 import { cn } from '@/lib/utils';
-import { ArrowLeft, Coins } from 'lucide-react';
+import { ArrowLeft, Coins, Wifi, WifiOff } from 'lucide-react';
 
 export function TableView() {
   const {
-    activeTable,
+    activeGame,
     currentUser,
-    leaveTable,
+    isConnected,
+    countdown,
+    turnTimer,
+    leaveRoom,
     setReady,
     placeBet,
     hit,
@@ -24,126 +27,135 @@ export function TableView() {
     doubleDown,
     decrementCountdown,
     decrementTurnTimer,
-    simulateBotActions,
-    resetForNewRound,
   } = useGameStore();
+
+  const [isLeaving, setIsLeaving] = useState(false);
 
   // Countdown timer
   useEffect(() => {
-    if (!activeTable) return;
-    if (activeTable.status !== 'countdown' && activeTable.status !== 'betting') return;
-    if (activeTable.countdown <= 0) return;
+    if (!activeGame) return;
+    if (activeGame.status !== 'countdown' && activeGame.status !== 'betting') return;
+    if (countdown <= 0) return;
 
     const timer = setInterval(() => {
       decrementCountdown();
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [activeTable?.status, activeTable?.countdown, decrementCountdown]);
+  }, [activeGame?.status, countdown, decrementCountdown]);
 
   // Turn timer
   useEffect(() => {
-    if (!activeTable) return;
-    if (activeTable.status !== 'playing') return;
-    if (activeTable.turnTimer <= 0) return;
+    if (!activeGame) return;
+    if (activeGame.status !== 'playing') return;
+    if (turnTimer <= 0) return;
 
     const timer = setInterval(() => {
       decrementTurnTimer();
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [activeTable?.status, activeTable?.turnTimer, decrementTurnTimer]);
+  }, [activeGame?.status, turnTimer, decrementTurnTimer]);
 
-  // Bot actions
-  useEffect(() => {
-    if (!activeTable) return;
-    if (activeTable.status !== 'playing') return;
+  const handleLeave = useCallback(async () => {
+    if (!activeGame) return;
 
-    const currentPlayer = activeTable.players[activeTable.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.isCurrentUser) return;
-
-    const timeout = setTimeout(() => {
-      simulateBotActions();
-    }, 1500);
-
-    return () => clearTimeout(timeout);
-  }, [activeTable?.currentPlayerIndex, activeTable?.status, simulateBotActions]);
-
-  // Leave on browser close
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      leaveTable();
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [leaveTable]);
-
-  const handleLeave = useCallback(() => {
-    if (activeTable && ['dealing', 'playing', 'dealer_turn', 'dealer-turn'].includes(activeTable.status)) {
-      if (window.confirm('Oyun devam ediyor! Çıkarsanız bu el için otomatik stand yapılacak. Devam etmek istiyor musunuz?')) {
-        leaveTable();
+    if (['dealing', 'playing', 'dealer_turn'].includes(activeGame.status)) {
+      if (!window.confirm('Oyun devam ediyor! Çıkarsanız bu el için otomatik stand yapılacak. Devam etmek istiyor musunuz?')) {
+        return;
       }
-    } else {
-      leaveTable();
     }
-  }, [activeTable, leaveTable]);
 
-  if (!activeTable) return null;
+    setIsLeaving(true);
+    await leaveRoom();
+    setIsLeaving(false);
+  }, [activeGame, leaveRoom]);
 
-  const currentPlayer = activeTable.players[activeTable.currentPlayerIndex];
-  const isMyTurn = currentPlayer?.isCurrentUser && activeTable.status === 'playing';
-  const myPlayer = activeTable.players.find(p => p.isCurrentUser);
+  const handleSetReady = useCallback(async () => {
+    await setReady();
+  }, [setReady]);
 
-  // 5 koltuk pozisyonları - yarım daire, daha geniş aralık
+  const handlePlaceBet = useCallback(async (amount: number) => {
+    await placeBet(amount);
+  }, [placeBet]);
+
+  const handleHit = useCallback(async () => {
+    await hit();
+  }, [hit]);
+
+  const handleStand = useCallback(async () => {
+    await stand();
+  }, [stand]);
+
+  const handleDouble = useCallback(async () => {
+    await doubleDown();
+  }, [doubleDown]);
+
+  if (!activeGame || !currentUser) return null;
+
+  const myPlayer = activeGame.players.find(p => p.isCurrentUser);
+  const currentPlayerIndex = activeGame.currentPlayerIndex;
+  const currentPlayer = currentPlayerIndex >= 0 ? activeGame.players[currentPlayerIndex] : null;
+  const isMyTurn = currentPlayer?.isCurrentUser && activeGame.status === 'playing';
+
+  // 6 koltuk pozisyonları - yarım daire
   const seatPositions = [
-    { left: '10%', bottom: '25%' },   // Seat 0 - Sol
-    { left: '25%', bottom: '10%' },   // Seat 1
-    { left: '50%', bottom: '5%' },    // Seat 2 - Orta
-    { left: '75%', bottom: '10%' },   // Seat 3
-    { left: '90%', bottom: '25%' },   // Seat 4 - Sağ
+    { left: '5%', bottom: '20%' },    // Seat 1 - Sol
+    { left: '20%', bottom: '8%' },    // Seat 2
+    { left: '38%', bottom: '3%' },    // Seat 3
+    { left: '62%', bottom: '3%' },    // Seat 4
+    { left: '80%', bottom: '8%' },    // Seat 5
+    { left: '95%', bottom: '20%' },   // Seat 6 - Sağ
   ];
 
   // Sıralı koltukları oluştur
-  const seats = [0, 1, 2, 3, 4].map((seatIndex) => {
-    const player = activeTable.players.find(p => p.seatIndex === seatIndex);
-    const isActive = currentPlayer?.seatIndex === seatIndex;
+  const seats = [1, 2, 3, 4, 5, 6].map((seatNumber, index) => {
+    const player = activeGame.players.find(p => p.seatNumber === seatNumber);
+    const isActive = player && currentPlayer?.telegramId === player.telegramId;
 
     return {
-      seatIndex,
+      seatNumber,
       player,
       isActive,
-      position: seatPositions[seatIndex],
+      position: seatPositions[index],
     };
   });
 
   return (
     <div className="fixed inset-0 table-felt flex flex-col overflow-hidden">
-      {/* Header - Minimal */}
+      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-black/40">
         <button
           onClick={handleLeave}
+          disabled={isLeaving}
           type="button"
-          className="flex items-center gap-1 text-white/80 hover:text-white text-sm"
+          className="flex items-center gap-1 text-white/80 hover:text-white text-sm disabled:opacity-50"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Geri</span>
+          <span>{isLeaving ? 'Çıkılıyor...' : 'Geri'}</span>
         </button>
 
         <div className="flex items-center gap-2 text-sm">
           <span className="text-green-400 font-medium">
-            {activeTable.name}
+            {activeGame.roomName}
           </span>
           <span className="text-gray-500">|</span>
           <span className="text-gray-400 text-xs">
-            {activeTable.minBet}-{activeTable.maxBet}
+            {activeGame.minBet}-{activeGame.maxBet}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Connection indicator */}
+          {isConnected ? (
+            <Wifi className="w-4 h-4 text-green-500" />
+          ) : (
+            <WifiOff className="w-4 h-4 text-red-500" />
+          )}
+
           <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-500/20">
             <Coins className="w-3 h-3 text-yellow-400" />
-            <span className="text-yellow-400 font-bold text-sm">{currentUser.balance}</span>
+            <span className="text-yellow-400 font-bold text-sm">{currentUser.balance.toLocaleString()}</span>
           </div>
           <Avatar className="w-8 h-8 border border-green-500">
             <AvatarImage src={currentUser.avatar} />
@@ -153,10 +165,10 @@ export function TableView() {
       </div>
 
       {/* Game Status - Ortada */}
-      {activeTable.status === 'waiting' && myPlayer?.status === 'waiting' && (
+      {activeGame.status === 'waiting' && myPlayer?.status === 'waiting' && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
           <Button
-            onClick={setReady}
+            onClick={handleSetReady}
             size="lg"
             className={cn(
               'px-6 py-4 text-lg font-bold',
@@ -170,7 +182,7 @@ export function TableView() {
         </div>
       )}
 
-      {activeTable.status === 'waiting' && myPlayer?.status === 'ready' && (
+      {activeGame.status === 'waiting' && myPlayer?.status === 'ready' && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
           <div className="text-center">
             <div className="text-xl font-bold text-green-400 mb-1">Hazırsın!</div>
@@ -179,12 +191,12 @@ export function TableView() {
         </div>
       )}
 
-      {activeTable.status === 'countdown' && (
+      {activeGame.status === 'countdown' && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
           <div className="text-center">
             <div className="text-gray-400 text-sm mb-1">Oyun Başlıyor</div>
-            <div className="text-5xl font-bold text-yellow-400 animate-countdown">
-              {activeTable.countdown}
+            <div className="text-5xl font-bold text-yellow-400 animate-pulse">
+              {countdown}
             </div>
           </div>
         </div>
@@ -193,29 +205,25 @@ export function TableView() {
       {/* Dealer Area */}
       <div className="flex-1 flex flex-col items-center justify-start pt-6 relative">
         <Dealer
-          cards={activeTable.dealerCards}
-          score={activeTable.dealerScore}
-          isPlaying={activeTable.status === 'dealer_turn'}
+          cards={activeGame.dealerCards}
+          score={activeGame.dealerScore}
+          isPlaying={activeGame.status === 'dealer_turn'}
         />
 
         {/* Players around the table */}
         <div className="absolute inset-0 pointer-events-none">
-          {seats.map(({ seatIndex, player, isActive, position }) => (
+          {seats.map(({ seatNumber, player, isActive, position }) => (
             <div
-              key={seatIndex}
+              key={seatNumber}
               className="absolute transform -translate-x-1/2 pointer-events-auto"
               style={{ left: position.left, bottom: position.bottom }}
             >
               <PlayerSlot
                 player={player}
-                seatIndex={seatIndex}
-                isActive={isActive}
-                turnTimer={activeTable.turnTimer}
+                seatNumber={seatNumber}
+                isActive={isActive || false}
+                turnTimer={turnTimer}
                 isEmpty={!player}
-                onSit={() => {
-                  if (myPlayer) return;
-                  useGameStore.getState().joinTable(activeTable.id, seatIndex);
-                }}
               />
             </div>
           ))}
@@ -223,14 +231,24 @@ export function TableView() {
       </div>
 
       {/* Betting Panel */}
-      {activeTable.status === 'betting' && myPlayer && myPlayer.bet === 0 && (
+      {activeGame.status === 'betting' && myPlayer && myPlayer.bet === 0 && (
         <BettingPanel
-          minBet={activeTable.minBet}
-          maxBet={activeTable.maxBet}
+          minBet={activeGame.minBet}
+          maxBet={activeGame.maxBet}
           balance={currentUser.balance}
-          countdown={activeTable.countdown}
-          onPlaceBet={placeBet}
+          countdown={countdown}
+          onPlaceBet={handlePlaceBet}
         />
+      )}
+
+      {/* Bahis bekleniyor mesajı */}
+      {activeGame.status === 'betting' && myPlayer && myPlayer.bet > 0 && (
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-30">
+          <div className="bg-green-600/80 px-6 py-3 rounded-xl text-white text-center">
+            <div className="font-bold">Bahsin: {myPlayer.bet}</div>
+            <div className="text-sm opacity-80">Diğer oyuncular bekleniyor... ({countdown}s)</div>
+          </div>
+        </div>
       )}
 
       {/* Game Actions */}
@@ -239,21 +257,28 @@ export function TableView() {
           canHit={myPlayer.totalScore < 21}
           canStand={true}
           canDouble={myPlayer.cards.length === 2 && currentUser.balance >= myPlayer.bet}
-          onHit={hit}
-          onStand={stand}
-          onDouble={doubleDown}
+          onHit={handleHit}
+          onStand={handleStand}
+          onDouble={handleDouble}
         />
       )}
 
+      {/* Sıra başkasında mesajı */}
+      {activeGame.status === 'playing' && !isMyTurn && currentPlayer && (
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-30">
+          <div className="bg-gray-800/90 px-6 py-3 rounded-xl text-white text-center">
+            <div className="text-sm opacity-80">Sıra:</div>
+            <div className="font-bold">{currentPlayer.name}</div>
+          </div>
+        </div>
+      )}
+
       {/* Results Panel */}
-      {activeTable.status === 'results' && (
+      {activeGame.status === 'results' && (
         <ResultsPanel
-          players={activeTable.players}
-          dealerScore={activeTable.dealerScore}
-          onReady={() => {
-            resetForNewRound();
-            setTimeout(() => setReady(), 100);
-          }}
+          players={activeGame.players}
+          dealerScore={activeGame.dealerScore}
+          onReady={handleSetReady}
           onLeave={handleLeave}
         />
       )}
