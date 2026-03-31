@@ -37,12 +37,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { initData, user } = body;
 
-    // Development modunda doğrulama atla
-    const isDev = process.env.NODE_ENV === 'development';
     const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
 
-    // Telegram doğrulama (production'da zorunlu)
-    if (!isDev && botToken && !verifyTelegramAuth(initData, botToken)) {
+    // Telegram doğrulama - her zaman zorunlu
+    if (botToken && !verifyTelegramAuth(initData, botToken)) {
       return NextResponse.json({ error: 'Invalid Telegram auth' }, { status: 401 });
     }
 
