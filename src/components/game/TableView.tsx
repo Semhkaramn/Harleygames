@@ -10,7 +10,7 @@ import { BettingPanel } from './BettingPanel';
 import { GameActions } from './GameActions';
 import { ResultsPanel } from './ResultsPanel';
 import { cn } from '@/lib/utils';
-import { ArrowLeft, Coins, Wifi, WifiOff, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Coins, Wifi, WifiOff } from 'lucide-react';
 
 export function TableView() {
   const {
@@ -31,7 +31,6 @@ export function TableView() {
   } = useGameStore();
 
   const [isLeaving, setIsLeaving] = useState(false);
-  const [showSeatPicker, setShowSeatPicker] = useState(false);
   const [isChangingSeat, setIsChangingSeat] = useState(false);
 
   // Countdown timer
@@ -96,14 +95,13 @@ export function TableView() {
     await doubleDown();
   }, [doubleDown]);
 
-  const handleChangeSeat = useCallback(async (newSeat: number) => {
+  // Direkt koltuk tıklama ile koltuk değiştir
+  const handleSeatClick = useCallback(async (newSeat: number) => {
+    if (isChangingSeat) return;
     setIsChangingSeat(true);
-    const success = await changeSeat(newSeat);
+    await changeSeat(newSeat);
     setIsChangingSeat(false);
-    if (success) {
-      setShowSeatPicker(false);
-    }
-  }, [changeSeat]);
+  }, [changeSeat, isChangingSeat]);
 
   if (!activeGame || !currentUser) return null;
 
@@ -112,12 +110,8 @@ export function TableView() {
   const currentPlayer = currentPlayerIndex >= 0 ? activeGame.players[currentPlayerIndex] : null;
   const isMyTurn = currentPlayer?.isCurrentUser && activeGame.status === 'playing';
 
-  // Koltuk değiştirme sadece waiting durumunda aktif
-  const canChangeSeat = activeGame.status === 'waiting';
-
-  // Dolu ve boş koltuklar
-  const occupiedSeats = activeGame.players.map(p => p.seatNumber);
-  const availableSeats = [1, 2, 3, 4, 5, 6].filter(s => !occupiedSeats.includes(s));
+  // Koltuk değiştirme sadece waiting durumunda ve oyuncu odada ise aktif
+  const canChangeSeat = activeGame.status === 'waiting' && !!myPlayer;
 
   // 6 koltuk pozisyonları - yarım daire
   const seatPositions = [
@@ -185,73 +179,13 @@ export function TableView() {
         </div>
       </div>
 
-      {/* Seat Change Button - Only visible in waiting status */}
-      {canChangeSeat && myPlayer && availableSeats.length > 0 && (
+      {/* Koltuk değiştirme ipucu - waiting durumunda */}
+      {canChangeSeat && (
         <div className="absolute top-14 left-1/2 transform -translate-x-1/2 z-40">
-          <Button
-            onClick={() => setShowSeatPicker(!showSeatPicker)}
-            variant="outline"
-            size="sm"
-            className="bg-gray-800/90 border-gray-600 text-white hover:bg-gray-700"
-          >
-            <ArrowRightLeft className="w-4 h-4 mr-2" />
-            Koltuk Değiştir ({myPlayer.seatNumber}. koltuk)
-          </Button>
-        </div>
-      )}
-
-      {/* Seat Picker Modal */}
-      {showSeatPicker && canChangeSeat && (
-        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-50 bg-gray-800 rounded-xl p-4 shadow-xl border border-gray-700">
-          <h3 className="text-white font-bold text-center mb-3">Koltuk Seç</h3>
-          <div className="grid grid-cols-6 gap-2">
-            {[1, 2, 3, 4, 5, 6].map((seat) => {
-              const isOccupied = occupiedSeats.includes(seat);
-              const isCurrentSeat = myPlayer?.seatNumber === seat;
-              const player = activeGame.players.find(p => p.seatNumber === seat);
-
-              return (
-                <button
-                  key={seat}
-                  type="button"
-                  onClick={() => !isOccupied && !isCurrentSeat && handleChangeSeat(seat)}
-                  disabled={isOccupied || isCurrentSeat || isChangingSeat}
-                  className={cn(
-                    'w-12 h-12 rounded-lg flex flex-col items-center justify-center transition-all',
-                    isCurrentSeat
-                      ? 'bg-green-600 ring-2 ring-green-400'
-                      : isOccupied
-                        ? 'bg-gray-700 cursor-not-allowed'
-                        : 'bg-gray-600 hover:bg-green-500 cursor-pointer'
-                  )}
-                >
-                  {isOccupied && player ? (
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src={player.avatar} />
-                      <AvatarFallback className="text-xs bg-gray-500">
-                        {player.name.substring(0, 1)}
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : (
-                    <span className={cn(
-                      'text-sm font-bold',
-                      isCurrentSeat ? 'text-white' : 'text-gray-300'
-                    )}>
-                      {seat}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-3 text-center">
-            <button
-              type="button"
-              onClick={() => setShowSeatPicker(false)}
-              className="text-gray-400 text-sm hover:text-white"
-            >
-              İptal
-            </button>
+          <div className="bg-gray-800/80 px-4 py-2 rounded-lg text-center">
+            <span className="text-green-400 text-sm">
+              Boş koltuklara tıklayarak yer değiştirebilirsin
+            </span>
           </div>
         </div>
       )}
@@ -263,10 +197,11 @@ export function TableView() {
             onClick={handleSetReady}
             size="lg"
             className={cn(
-              'px-6 py-4 text-lg font-bold',
+              'px-8 py-5 text-xl font-bold',
               'bg-gradient-to-r from-green-600 to-green-500',
               'hover:from-green-500 hover:to-green-400',
-              'shadow-lg shadow-green-600/30'
+              'shadow-lg shadow-green-600/30',
+              'animate-pulse'
             )}
           >
             Hazırım
@@ -277,8 +212,20 @@ export function TableView() {
       {activeGame.status === 'waiting' && myPlayer?.status === 'ready' && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
           <div className="text-center">
-            <div className="text-xl font-bold text-green-400 mb-1">Hazırsın!</div>
+            <div className="text-2xl font-bold text-green-400 mb-2">Hazırsın!</div>
             <div className="text-gray-400 text-sm">Diğer oyuncular bekleniyor...</div>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              {activeGame.players.map((p) => (
+                <div
+                  key={p.telegramId}
+                  className={cn(
+                    'w-3 h-3 rounded-full',
+                    p.status === 'ready' ? 'bg-green-500' : 'bg-gray-500'
+                  )}
+                  title={`${p.name}: ${p.status === 'ready' ? 'Hazır' : 'Bekliyor'}`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -287,7 +234,7 @@ export function TableView() {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
           <div className="text-center">
             <div className="text-gray-400 text-sm mb-1">Oyun Başlıyor</div>
-            <div className="text-5xl font-bold text-yellow-400 animate-pulse">
+            <div className="text-6xl font-bold text-yellow-400 animate-pulse">
               {countdown}
             </div>
           </div>
@@ -316,6 +263,9 @@ export function TableView() {
                 isActive={isActive || false}
                 turnTimer={turnTimer}
                 isEmpty={!player}
+                canChangeSeat={canChangeSeat}
+                isChangingSeat={isChangingSeat}
+                onSeatClick={handleSeatClick}
               />
             </div>
           ))}
