@@ -4,7 +4,7 @@ import type { Player } from '@/types/game';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CardStack } from './PlayingCard';
-import { User } from 'lucide-react';
+import { User, Plus } from 'lucide-react';
 
 interface PlayerSlotProps {
   player?: Player;
@@ -12,6 +12,9 @@ interface PlayerSlotProps {
   isActive: boolean;
   turnTimer?: number;
   isEmpty: boolean;
+  canChangeSeat?: boolean;
+  isChangingSeat?: boolean;
+  onSeatClick?: (seatNumber: number) => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -29,22 +32,58 @@ const statusColors: Record<string, string> = {
   spectating: 'border-gray-600',
 };
 
-export function PlayerSlot({ player, seatNumber, isActive, turnTimer = 15, isEmpty }: PlayerSlotProps) {
-  // Boş koltuk
+export function PlayerSlot({
+  player,
+  seatNumber,
+  isActive,
+  turnTimer = 15,
+  isEmpty,
+  canChangeSeat = false,
+  isChangingSeat = false,
+  onSeatClick,
+}: PlayerSlotProps) {
+  // Boş koltuk - tıklanabilir
   if (isEmpty || !player) {
+    const isClickable = canChangeSeat && onSeatClick && !isChangingSeat;
+
     return (
       <div className="flex flex-col items-center gap-1">
-        <div
+        <button
+          type="button"
+          onClick={() => isClickable && onSeatClick(seatNumber)}
+          disabled={!isClickable || isChangingSeat}
           className={cn(
             'flex items-center justify-center',
-            'w-12 h-12 rounded-full',
-            'border-2 border-dashed border-gray-600/50',
-            'bg-gray-800/30'
+            'w-14 h-14 rounded-full',
+            'border-2 border-dashed',
+            'transition-all duration-200',
+            isClickable ? [
+              'border-green-500/50 bg-green-900/20',
+              'hover:border-green-400 hover:bg-green-800/40',
+              'hover:scale-110 cursor-pointer',
+              'group'
+            ] : [
+              'border-gray-600/50 bg-gray-800/30',
+              'cursor-default'
+            ],
+            isChangingSeat && 'opacity-50'
           )}
         >
-          <User className="w-5 h-5 text-gray-600" />
-        </div>
-        <span className="text-gray-600 text-xs">{seatNumber}</span>
+          {isClickable ? (
+            <Plus className="w-6 h-6 text-green-400 group-hover:scale-110 transition-transform" />
+          ) : (
+            <User className="w-5 h-5 text-gray-600" />
+          )}
+        </button>
+        <span className={cn(
+          'text-xs font-medium',
+          isClickable ? 'text-green-400/80' : 'text-gray-600'
+        )}>
+          {seatNumber}
+        </span>
+        {isClickable && (
+          <span className="text-[10px] text-green-400/60">Tıkla</span>
+        )}
       </div>
     );
   }
@@ -77,44 +116,51 @@ export function PlayerSlot({ player, seatNumber, isActive, turnTimer = 15, isEmp
       <div className="relative">
         {/* Timer ring (sadece aktif oyuncu için) */}
         {isActive && (
-          <svg className="absolute -inset-1 w-14 h-14 -rotate-90">
+          <svg className="absolute -inset-1 w-16 h-16 -rotate-90">
             <circle
-              cx="28"
-              cy="28"
-              r="26"
+              cx="32"
+              cy="32"
+              r="30"
               fill="none"
               stroke="rgba(255,255,255,0.1)"
               strokeWidth="3"
             />
             <circle
-              cx="28"
-              cy="28"
-              r="26"
+              cx="32"
+              cy="32"
+              r="30"
               fill="none"
               stroke={timerPercent > 50 ? '#22c55e' : timerPercent > 25 ? '#eab308' : '#ef4444'}
               strokeWidth="3"
-              strokeDasharray={`${2 * Math.PI * 26}`}
-              strokeDashoffset={`${2 * Math.PI * 26 * (1 - timerPercent / 100)}`}
+              strokeDasharray={`${2 * Math.PI * 30}`}
+              strokeDashoffset={`${2 * Math.PI * 30 * (1 - timerPercent / 100)}`}
               className="transition-all duration-1000 ease-linear"
             />
           </svg>
         )}
 
         <Avatar className={cn(
-          'w-12 h-12 border-2 transition-all',
+          'w-14 h-14 border-2 transition-all',
           borderColor,
           isActive && 'ring-2 ring-green-400 ring-offset-2 ring-offset-transparent'
         )}>
           {/* Telegram profil fotoğrafı veya fallback */}
           <AvatarImage src={player.avatar} alt={player.name} />
-          <AvatarFallback className="bg-gray-700 text-white text-xs">
+          <AvatarFallback className="bg-gray-700 text-white text-sm">
             {player.name.substring(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
+
+        {/* Ready indicator */}
+        {player.status === 'ready' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-900 flex items-center justify-center">
+            <span className="text-[8px]">✓</span>
+          </div>
+        )}
       </div>
 
       {/* İsim */}
-      <span className="text-white text-xs font-medium truncate max-w-[60px]">
+      <span className="text-white text-xs font-medium truncate max-w-[70px]">
         {player.isCurrentUser ? 'Sen' : player.name}
       </span>
 
