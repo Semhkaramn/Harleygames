@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { gameEvents, broadcastRoomsToLobby } from '@/lib/sse';
 
 // ID oluşturucu
 function generateRoomId(): string {
@@ -109,6 +110,9 @@ export async function POST(request: NextRequest) {
       ON CONFLICT DO NOTHING
     `;
 
+    // SSE ile herkese bildir
+    await gameEvents.roomCreated(result[0]);
+
     return NextResponse.json({ room: result[0] });
   } catch (error) {
     console.error('Create room error:', error);
@@ -179,6 +183,19 @@ export async function PATCH(request: NextRequest) {
         RETURNING *
       `;
 
+      // Oyuncu bilgilerini al
+      const user = await sql`SELECT * FROM users WHERE telegram_id = ${telegram_id}`;
+      const playerInfo = {
+        ...result[0],
+        first_name: user[0]?.first_name,
+        username: user[0]?.username,
+        photo_url: user[0]?.photo_url,
+        chips: user[0]?.chips,
+      };
+
+      // SSE ile herkese bildir (anlık güncelleme)
+      await gameEvents.playerJoined(room_id, playerInfo);
+
       return NextResponse.json({ success: true, seat: result[0] });
     }
 
@@ -187,6 +204,9 @@ export async function PATCH(request: NextRequest) {
         DELETE FROM room_players
         WHERE room_id = ${room_id} AND telegram_id = ${telegram_id}
       `;
+
+      // SSE ile herkese bildir (anlık güncelleme)
+      await gameEvents.playerLeft(room_id, telegram_id);
 
       // Eğer oda boş kaldıysa, temizle
       const remainingPlayers = await sql`
@@ -203,6 +223,8 @@ export async function PATCH(request: NextRequest) {
         // Aktif oyun yoksa odayı sil
         if (activeGames.length === 0) {
           await deleteRoom(room_id);
+          // Lobby'yi güncelle
+          await broadcastRoomsToLobby();
         }
       }
 
@@ -257,6 +279,9 @@ export async function PATCH(request: NextRequest) {
         SET seat_number = ${seat_number}
         WHERE room_id = ${room_id} AND telegram_id = ${telegram_id}
       `;
+
+      // SSE ile herkese bildir (anlık güncelleme)
+      await gameEvents.seatChanged(room_id, telegram_id, seat_number);
 
       return NextResponse.json({ success: true, newSeat: seat_number });
     }
