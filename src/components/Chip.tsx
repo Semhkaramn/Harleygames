@@ -5,6 +5,7 @@ interface ChipProps {
   onClick?: () => void;
   selected?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
 }
 
 const CHIP_COLORS: Record<number, { bg: string; border: string }> = {
@@ -17,7 +18,7 @@ const CHIP_COLORS: Record<number, { bg: string; border: string }> = {
   1000: { bg: 'from-yellow-400 to-yellow-600', border: 'border-yellow-300' },
 };
 
-export function Chip({ value, onClick, selected = false, size = 'md' }: ChipProps) {
+export function Chip({ value, onClick, selected = false, size = 'md', disabled = false }: ChipProps) {
   const colors = CHIP_COLORS[value] || CHIP_COLORS[100];
 
   const sizeClasses = {
@@ -30,6 +31,7 @@ export function Chip({ value, onClick, selected = false, size = 'md' }: ChipProp
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`
         ${sizeClasses[size]}
         rounded-full
@@ -44,6 +46,7 @@ export function Chip({ value, onClick, selected = false, size = 'md' }: ChipProp
         relative
         ${selected ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent scale-110' : ''}
         ${value === 1000 ? 'text-gray-900' : ''}
+        ${disabled ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''}
       `}
       style={{
         boxShadow: selected
