@@ -163,11 +163,17 @@ export async function addChips(telegramId: number, amount: number) {
 }
 
 export async function subtractChips(telegramId: number, amount: number) {
+  // Önce yeterli bakiye olup olmadığını kontrol et
+  const user = await getUser(telegramId);
+  if (!user || user.chips < amount) {
+    return null; // Yetersiz bakiye
+  }
+
   const result = await sql`
     UPDATE users SET
       chips = chips - ${amount},
       updated_at = CURRENT_TIMESTAMP
-    WHERE telegram_id = ${telegramId}
+    WHERE telegram_id = ${telegramId} AND chips >= ${amount}
     RETURNING *
   `;
   return result[0];
