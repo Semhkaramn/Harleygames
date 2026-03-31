@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Lobby } from '@/components/Lobby';
 import { GameTable } from '@/components/GameTable';
-import { TournamentList } from '@/components/Tournament';
-import { Leaderboard } from '@/components/Leaderboard';
 import { useUserStore, useUIStore, useRoomStore } from '@/lib/store';
 import {
   initTelegramWebApp,
@@ -99,7 +97,7 @@ export default function Home() {
   useEffect(() => {
     if (isInitialized && currentView === 'lobby') {
       fetchRooms();
-      const interval = setInterval(fetchRooms, 5000); // Her 5 saniyede odaları güncelle
+      const interval = setInterval(fetchRooms, 5000);
       return () => clearInterval(interval);
     }
   }, [isInitialized, currentView, fetchRooms]);
@@ -119,7 +117,6 @@ export default function Home() {
     }
 
     try {
-      // Odaya katıl
       const response = await fetch('/api/rooms', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -127,7 +124,7 @@ export default function Home() {
           action: 'join',
           room_id: roomId,
           telegram_id: dbUser.telegram_id,
-          seat_number: 0, // İlk boş koltuk
+          seat_number: 0,
         }),
       });
 
@@ -156,7 +153,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: `${dbUser.first_name || 'Player'}'s Room`,
+          name: `${dbUser.first_name || 'Oyuncu'}'nin Odası`,
           min_bet: 10,
           max_bet: 1000,
           telegram_id: dbUser.telegram_id,
@@ -178,11 +175,6 @@ export default function Home() {
     }
   };
 
-  const handleJoinTournament = (tournamentId: string) => {
-    hapticFeedback('medium');
-    showNotification('info', 'Turnuva sistemi yakında aktif olacak!');
-  };
-
   const handleBackToLobby = () => {
     setSelectedRoomId(null);
     setCurrentView('lobby');
@@ -192,135 +184,113 @@ export default function Home() {
   // Loading screen
   if (isLoading || !isInitialized) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
+      <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
         <div className="text-center">
-          <div className="w-20 h-20 mx-auto mb-6 relative">
-            <div className="absolute inset-0 rounded-full border-4 border-amber-500/20"></div>
-            <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin"></div>
-            <div className="absolute inset-2 rounded-full bg-gradient-to-br from-amber-500/20 to-transparent"></div>
+          <div className="w-24 h-24 mx-auto mb-8 relative">
+            <div className="absolute inset-0 rounded-full border-4 border-amber-500/20" />
+            <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
+            <div className="absolute inset-3 rounded-full bg-gradient-to-br from-amber-500/30 to-transparent animate-pulse" />
           </div>
-          <h2 className="text-2xl font-bold gold-text mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h2 className="text-3xl font-bold gold-text mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
             HARLEY GAMES
           </h2>
-          <p className="text-gray-500 animate-pulse">Yükleniyor...</p>
+          <p className="text-gray-500 animate-pulse text-sm">Yükleniyor...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen pb-20">
+    <main className="min-h-screen bg-[#0a0a0a]">
       {/* Notification */}
       {notification && (
         <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg animate-slide-down ${
-            notification.type === 'success' ? 'bg-green-500/90' :
-            notification.type === 'error' ? 'bg-red-500/90' :
-            'bg-blue-500/90'
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-2xl animate-slide-down backdrop-blur-lg ${
+            notification.type === 'success' ? 'bg-emerald-500/90 border border-emerald-400/30' :
+            notification.type === 'error' ? 'bg-red-500/90 border border-red-400/30' :
+            'bg-amber-500/90 border border-amber-400/30'
           }`}
         >
-          <p className="text-white font-medium">{notification.message}</p>
+          <p className="text-white font-medium text-sm">{notification.message}</p>
         </div>
       )}
 
       <Header
         currentView={currentView}
-        onViewChange={setCurrentView}
         userChips={dbUser?.chips || 0}
         userName={dbUser?.first_name || telegramUser?.first_name || ''}
         userAvatar={dbUser?.avatar || '🎭'}
         onBack={currentView === 'game' ? handleBackToLobby : undefined}
       />
 
-      <div className="max-w-7xl mx-auto px-4 py-4">
+      <div className="max-w-5xl mx-auto px-4 py-6">
         {currentView === 'lobby' && (
-          <div className="animate-slide-up">
+          <div className="animate-fade-in">
             {/* Hero Section */}
-            <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-5xl font-bold mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <div className="text-center mb-10">
+              <h1 className="text-4xl md:text-6xl font-bold mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
                 <span className="gold-text">HARLEY GAMES</span>
               </h1>
-              <p className="text-gray-400 text-sm md:text-base max-w-xl mx-auto">
-                Canlı blackjack oyna, arkadaşlarınla yarış ve büyük ödüller kazan!
+              <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
+                Telegram'da Blackjack oyna, arkadaşlarınla yarış
               </p>
-              {!dbUser && (
-                <p className="text-amber-500 text-sm mt-2">
-                  Telegram'dan açarak giriş yapabilirsiniz
-                </p>
-              )}
             </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-              {[
-                { label: 'Bakiye', value: `${(dbUser?.chips || 0).toLocaleString()}`, icon: '💰' },
-                { label: 'Kazanma', value: `${dbUser?.total_wins || 0}`, icon: '🏆' },
-                { label: 'Toplam Oyun', value: `${dbUser?.total_games || 0}`, icon: '🎲' },
-                { label: 'Oran', value: dbUser?.total_games ? `%${Math.round((dbUser.total_wins / dbUser.total_games) * 100)}` : '%0', icon: '📊' },
-              ].map((stat) => (
-                <div key={stat.label} className="glass rounded-xl p-3 text-center">
-                  <div className="text-2xl mb-1">{stat.icon}</div>
-                  <div className="text-lg font-bold text-white">{stat.value}</div>
-                  <div className="text-xs text-gray-500">{stat.label}</div>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
+                <div className="text-3xl mb-2">💰</div>
+                <div className="text-2xl font-bold text-white">{(dbUser?.chips || 0).toLocaleString()}</div>
+                <div className="text-xs text-gray-500 mt-1">Bakiye</div>
+              </div>
+              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
+                <div className="text-3xl mb-2">🏆</div>
+                <div className="text-2xl font-bold text-emerald-400">{dbUser?.total_wins || 0}</div>
+                <div className="text-xs text-gray-500 mt-1">Kazanılan</div>
+              </div>
+              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
+                <div className="text-3xl mb-2">🎲</div>
+                <div className="text-2xl font-bold text-white">{dbUser?.total_games || 0}</div>
+                <div className="text-xs text-gray-500 mt-1">Toplam Oyun</div>
+              </div>
+              <div className="glass rounded-2xl p-5 text-center hover:scale-105 transition-transform">
+                <div className="text-3xl mb-2">📊</div>
+                <div className="text-2xl font-bold text-amber-400">
+                  {dbUser?.total_games ? `%${Math.round((dbUser.total_wins / dbUser.total_games) * 100)}` : '%0'}
                 </div>
-              ))}
+                <div className="text-xs text-gray-500 mt-1">Başarı Oranı</div>
+              </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {/* Create Room Button */}
+            <div className="flex justify-center mb-8">
               <button
                 type="button"
                 onClick={handleCreateRoom}
-                className="btn-gold text-base px-6 py-3"
                 disabled={!dbUser}
+                className="btn-gold text-lg px-10 py-4 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Oda Oluştur
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentView('tournament')}
-                className="btn-secondary text-base px-6 py-3"
-              >
-                Turnuvalar
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentView('leaderboard')}
-                className="btn-secondary text-base px-6 py-3"
-              >
-                Sıralama
+                <span className="text-xl">+</span>
+                Yeni Oda Oluştur
               </button>
             </div>
+
+            {!dbUser && (
+              <p className="text-center text-amber-500/80 text-sm mb-6">
+                Telegram üzerinden açarak giriş yapabilirsiniz
+              </p>
+            )}
 
             <Lobby onJoinRoom={handleJoinRoom} onCreateRoom={handleCreateRoom} />
           </div>
         )}
 
         {currentView === 'game' && (
-          <div className="animate-slide-up">
+          <div className="animate-fade-in">
             <GameTable roomId={selectedRoomId} onBack={handleBackToLobby} />
           </div>
         )}
-
-        {currentView === 'tournament' && (
-          <div className="animate-slide-up">
-            <TournamentList onJoinTournament={handleJoinTournament} />
-          </div>
-        )}
-
-        {currentView === 'leaderboard' && (
-          <div className="animate-slide-up">
-            <Leaderboard />
-          </div>
-        )}
       </div>
-
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 py-3 bg-black/80 backdrop-blur-lg border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-4 text-center text-gray-500 text-xs">
-          <p>Harley Games - Telegram Blackjack</p>
-        </div>
-      </footer>
     </main>
   );
 }
