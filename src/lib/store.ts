@@ -121,19 +121,23 @@ export const useLiveGameStore = create<LiveGameState>((set) => ({
   reset: () => set(initialGameState),
 }));
 
-// UI Store - Sadeleştirilmiş
+// UI Store - Genişletilmiş
 interface UIState {
-  currentView: 'lobby' | 'game';
+  currentView: 'lobby' | 'game' | 'leaderboard';
   notification: { type: 'success' | 'error' | 'info'; message: string } | null;
+  showBonusModal: boolean;
   setCurrentView: (view: UIState['currentView']) => void;
   showNotification: (type: 'success' | 'error' | 'info', message: string) => void;
   clearNotification: () => void;
+  setShowBonusModal: (show: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   currentView: 'lobby',
   notification: null,
+  showBonusModal: false,
   setCurrentView: (view) => set({ currentView: view }),
   showNotification: (type, message) => set({ notification: { type, message } }),
   clearNotification: () => set({ notification: null }),
+  setShowBonusModal: (show) => set({ showBonusModal: show }),
 }));
