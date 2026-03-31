@@ -1,5 +1,6 @@
 'use client';
 
+import { motion, AnimatePresence } from 'framer-motion';
 import { type Player, calculateHandValue } from '@/lib/gameTypes';
 import { PlayingCard } from './PlayingCard';
 import { ChipStack } from './Chip';
@@ -13,101 +14,255 @@ interface PlayerSeatProps {
 }
 
 export function PlayerSeat({ player, seatNumber, isCurrentUser, onSeatClick, position }: PlayerSeatProps) {
-  const statusColors: Record<string, string> = {
-    waiting: 'text-gray-400',
-    playing: 'text-blue-400',
-    stand: 'text-amber-400',
-    bust: 'text-red-500',
-    blackjack: 'text-yellow-400',
-    win: 'text-green-400',
-    lose: 'text-red-400',
-    push: 'text-gray-300',
+  const statusConfig: Record<string, { color: string; bg: string; text: string; glow?: string }> = {
+    waiting: { color: 'text-gray-400', bg: 'bg-gray-500/20', text: 'Bekliyor' },
+    playing: { color: 'text-emerald-400', bg: 'bg-emerald-500/20', text: 'Oynuyor', glow: 'rgba(16, 185, 129, 0.4)' },
+    stand: { color: 'text-amber-400', bg: 'bg-amber-500/20', text: 'Dur' },
+    bust: { color: 'text-red-500', bg: 'bg-red-500/20', text: 'Battı!' },
+    blackjack: { color: 'text-yellow-400', bg: 'bg-yellow-500/20', text: 'BLACKJACK!', glow: 'rgba(250, 204, 21, 0.5)' },
+    win: { color: 'text-green-400', bg: 'bg-green-500/20', text: 'Kazandı!', glow: 'rgba(34, 197, 94, 0.5)' },
+    lose: { color: 'text-red-400', bg: 'bg-red-500/20', text: 'Kaybetti' },
+    push: { color: 'text-gray-300', bg: 'bg-gray-500/20', text: 'Berabere' },
   };
 
-  const statusText: Record<string, string> = {
-    waiting: 'Bekliyor',
-    playing: 'Oynuyor',
-    stand: 'Dur',
-    bust: 'Battı!',
-    blackjack: 'BLACKJACK!',
-    win: 'Kazandı!',
-    lose: 'Kaybetti',
-    push: 'Berabere',
-  };
-
+  // Empty seat
   if (!player) {
     return (
-      <div
+      <motion.div
         className="absolute transform -translate-x-1/2 -translate-y-1/2"
         style={{ left: position.x, top: position.y }}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: seatNumber * 0.1 }}
       >
-        <button
+        <motion.button
           type="button"
           onClick={onSeatClick}
-          className="w-20 h-20 md:w-24 md:h-24 rounded-full border-2 border-dashed border-green-600/50 bg-green-900/20 flex items-center justify-center hover:bg-green-800/30 hover:border-green-500 transition-all duration-300 group"
+          className="w-20 h-20 md:w-24 md:h-24 rounded-full border-2 border-dashed border-emerald-600/40 bg-emerald-900/10 flex items-center justify-center backdrop-blur-sm group relative overflow-hidden"
+          whileHover={{
+            scale: 1.05,
+            borderColor: 'rgba(16, 185, 129, 0.6)',
+            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+          }}
+          whileTap={{ scale: 0.95 }}
         >
-          <div className="text-center">
-            <span className="text-2xl md:text-3xl text-green-500/70 group-hover:text-green-400 transition-colors">+</span>
-            <p className="text-[10px] md:text-xs text-green-500/70 group-hover:text-green-400 mt-1">Koltuk {seatNumber}</p>
+          {/* Pulse effect */}
+          <motion.div
+            className="absolute inset-0 rounded-full bg-emerald-500/10"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.5, 0, 0.5],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: 'easeInOut',
+            }}
+          />
+
+          <div className="text-center relative z-10">
+            <motion.span
+              className="text-2xl md:text-3xl text-emerald-500/70 block"
+              animate={{ rotate: [0, 180, 360] }}
+              transition={{ duration: 10, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
+            >
+              +
+            </motion.span>
+            <p className="text-[10px] md:text-xs text-emerald-500/70 mt-1 font-medium">
+              Koltuk {seatNumber}
+            </p>
           </div>
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
     );
   }
 
   const handValue = calculateHandValue(player.cards);
+  const status = statusConfig[player.status] || statusConfig.waiting;
+  const isWinner = player.status === 'win' || player.status === 'blackjack';
+  const isBust = player.status === 'bust';
 
   return (
-    <div
-      className={`absolute transform -translate-x-1/2 -translate-y-1/2 ${player.isTurn ? 'animate-pulse-glow' : ''}`}
+    <motion.div
+      className="absolute transform -translate-x-1/2 -translate-y-1/2"
       style={{ left: position.x, top: position.y }}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
     >
-      <div className={`relative ${isCurrentUser ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-transparent rounded-xl' : ''}`}>
+      <div className={`relative ${isCurrentUser ? 'scale-105' : ''}`}>
+        {/* Glow effect for turn */}
+        <AnimatePresence>
+          {player.isTurn && (
+            <motion.div
+              className="absolute inset-0 rounded-full -m-2"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{
+                opacity: [0.4, 0.8, 0.4],
+                scale: [1, 1.1, 1],
+              }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{
+                duration: 1.5,
+                repeat: Number.POSITIVE_INFINITY,
+                ease: 'easeInOut',
+              }}
+              style={{
+                background: `radial-gradient(circle, ${status.glow || 'rgba(16, 185, 129, 0.4)'} 0%, transparent 70%)`,
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Winner celebration effect */}
+        <AnimatePresence>
+          {isWinner && (
+            <motion.div
+              className="absolute inset-0 rounded-full -m-4"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{
+                opacity: [0, 1, 0],
+                scale: [1, 1.5, 2],
+              }}
+              transition={{
+                duration: 1,
+                repeat: Number.POSITIVE_INFINITY,
+              }}
+              style={{
+                background: `radial-gradient(circle, ${status.glow || 'rgba(34, 197, 94, 0.3)'} 0%, transparent 70%)`,
+              }}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Cards */}
-        {player.cards.length > 0 && (
-          <div className="absolute -top-28 left-1/2 -translate-x-1/2 flex -space-x-4">
-            {player.cards.map((card, index) => (
-              <PlayingCard key={`${card.suit}-${card.rank}-${index}`} card={card} index={index} size="sm" />
-            ))}
-          </div>
-        )}
+        <AnimatePresence>
+          {player.cards.length > 0 && (
+            <motion.div
+              className="absolute -top-28 left-1/2 -translate-x-1/2 flex -space-x-4"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              {player.cards.map((card, index) => (
+                <PlayingCard
+                  key={`${card.suit}-${card.rank}-${index}`}
+                  card={card}
+                  index={index}
+                  size="sm"
+                  flipDelay={index * 200}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Hand value */}
-        {player.cards.length > 0 && (
-          <div className={`absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-xs font-bold ${handValue > 21 ? 'bg-red-500' : 'bg-black/70'} text-white`}>
-            {handValue}
-          </div>
-        )}
+        {/* Hand value badge */}
+        <AnimatePresence>
+          {player.cards.length > 0 && (
+            <motion.div
+              className={`absolute -top-8 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                handValue > 21
+                  ? 'bg-red-500/90 border-red-400/50'
+                  : handValue === 21
+                  ? 'bg-amber-500/90 border-amber-400/50'
+                  : 'bg-black/80 border-white/10'
+              } text-white shadow-lg`}
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{
+                opacity: 1,
+                scale: isBust ? [1, 1.2, 1] : 1,
+              }}
+              transition={isBust ? { duration: 0.3 } : undefined}
+            >
+              {handValue}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Player info */}
+        {/* Player info container */}
         <div className="flex flex-col items-center">
-          {/* Avatar */}
-          <div className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center text-2xl md:text-3xl ${player.isTurn ? 'bg-green-600' : 'bg-gray-800'} border-2 ${player.isTurn ? 'border-green-400' : 'border-gray-600'} transition-all`}>
-            {player.avatar}
-          </div>
+          {/* Avatar with ring */}
+          <motion.div
+            className={`relative w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center text-2xl md:text-3xl transition-all duration-300
+              ${player.isTurn ? 'bg-gradient-to-br from-emerald-500 to-emerald-700' : 'bg-gradient-to-br from-gray-700 to-gray-900'}
+              ${isCurrentUser ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-black' : ''}
+            `}
+            style={{
+              boxShadow: player.isTurn
+                ? '0 0 20px rgba(16, 185, 129, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.2)'
+                : 'inset 0 2px 4px rgba(255, 255, 255, 0.1), inset 0 -2px 4px rgba(0, 0, 0, 0.3)',
+            }}
+            animate={isWinner ? {
+              rotate: [0, -5, 5, -5, 5, 0],
+              scale: [1, 1.1, 1],
+            } : undefined}
+            transition={isWinner ? { duration: 0.5 } : undefined}
+          >
+            {/* Border gradient */}
+            <div className={`absolute inset-0 rounded-full border-2 ${
+              player.isTurn ? 'border-emerald-300/50' : 'border-gray-600/50'
+            }`} />
+
+            <span className="relative z-10">{player.avatar}</span>
+
+            {/* Current user indicator */}
+            {isCurrentUser && (
+              <motion.div
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 500 }}
+              >
+                <span className="text-[8px]">👤</span>
+              </motion.div>
+            )}
+          </motion.div>
 
           {/* Name & Status */}
-          <div className="mt-1 text-center">
-            <p className="text-xs md:text-sm font-semibold text-white truncate max-w-[80px]">{player.name}</p>
-            <p className={`text-[10px] md:text-xs font-medium ${statusColors[player.status]}`}>
-              {statusText[player.status]}
+          <div className="mt-1.5 text-center">
+            <p className="text-xs md:text-sm font-semibold text-white truncate max-w-[80px] drop-shadow-md">
+              {player.name}
             </p>
+            <motion.p
+              className={`text-[10px] md:text-xs font-medium ${status.color} mt-0.5`}
+              animate={player.isTurn ? {
+                opacity: [0.7, 1, 0.7],
+              } : undefined}
+              transition={player.isTurn ? {
+                duration: 1.5,
+                repeat: Number.POSITIVE_INFINITY,
+              } : undefined}
+            >
+              {status.text}
+            </motion.p>
           </div>
 
-          {/* Chips */}
-          <div className="flex items-center gap-1 mt-1 text-xs">
+          {/* Chips display */}
+          <motion.div
+            className="flex items-center gap-1.5 mt-1 text-xs bg-black/40 px-2 py-0.5 rounded-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
             <span className="text-amber-400">💰</span>
-            <span className="text-amber-300 font-bold">{player.chips}</span>
-          </div>
+            <span className="text-amber-300 font-bold">{player.chips.toLocaleString()}</span>
+          </motion.div>
 
-          {/* Bet */}
-          {player.bet > 0 && (
-            <div className="absolute -bottom-16 left-1/2 -translate-x-1/2">
-              <ChipStack total={player.bet} maxDisplay={3} />
-            </div>
-          )}
+          {/* Bet chips */}
+          <AnimatePresence>
+            {player.bet > 0 && (
+              <motion.div
+                className="absolute -bottom-16 left-1/2 -translate-x-1/2"
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.5, y: -20 }}
+                transition={{ type: 'spring', stiffness: 300 }}
+              >
+                <ChipStack total={player.bet} maxDisplay={3} animate />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
