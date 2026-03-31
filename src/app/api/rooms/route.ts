@@ -88,6 +88,13 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
 
+    // Oda sahibini otomatik olarak 1. koltuğa ekle
+    await sql`
+      INSERT INTO room_players (room_id, telegram_id, seat_number)
+      VALUES (${roomId}, ${telegram_id}, 1)
+      ON CONFLICT DO NOTHING
+    `;
+
     return NextResponse.json({ room: result[0] });
   } catch (error) {
     console.error('Create room error:', error);
@@ -239,7 +246,7 @@ export async function DELETE(request: NextRequest) {
 
 // Yardımcı fonksiyonlar
 
-// Boş odaları temizle
+// Boş odaları ve eski oyunları temizle
 async function cleanupEmptyRooms() {
   try {
     // 1 saatten eski boş odaları bul
@@ -255,6 +262,24 @@ async function cleanupEmptyRooms() {
     for (const room of emptyRooms) {
       await deleteRoom(room.id);
     }
+
+    // 10 dakikadan eski 'results' durumundaki oyunları temizle
+    // Önce game_players'ı sil
+    await sql`
+      DELETE FROM game_players
+      WHERE game_id IN (
+        SELECT id FROM games
+        WHERE status = 'results'
+        AND ended_at < NOW() - INTERVAL '10 minutes'
+      )
+    `;
+
+    // Sonra oyunları sil
+    await sql`
+      DELETE FROM games
+      WHERE status = 'results'
+      AND ended_at < NOW() - INTERVAL '10 minutes'
+    `;
 
     // Bitmiş oyunları olan odaların durumunu güncelle
     await sql`
