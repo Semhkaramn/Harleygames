@@ -43,7 +43,7 @@ export function ResultsPanel({ players, dealerScore, onReady, onLeave }: Results
             let winAmount = 0;
 
             if (player.status === 'won') winAmount = player.bet;
-            else if (player.status === 'blackjack') winAmount = player.bet * 1.5;
+            else if (player.status === 'blackjack') winAmount = Math.floor(player.bet * 1.5);
             else if (player.status === 'push') winAmount = 0;
             else if (player.status === 'lost' || player.status === 'bust') winAmount = -player.bet;
 
