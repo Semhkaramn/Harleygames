@@ -12,6 +12,21 @@ interface Card {
   faceUp: boolean;
 }
 
+interface GamePlayer {
+  id: number;
+  telegram_id: number;
+  seat_number: number;
+  status: string;
+  cards: Card[];
+  bet: number;
+  is_turn: boolean;
+  first_name?: string;
+  username?: string;
+  photo_url?: string;
+  user_chips?: number;
+  chips?: number;
+}
+
 // Yeni deste oluştur
 function createDeck(): Card[] {
   const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
@@ -81,18 +96,21 @@ async function broadcastGameState(roomId: string, gameId: number, countdown?: nu
       dealer_score: game[0].dealer_score || 0,
       current_player_index: game[0].current_player_index,
       betting_end_time: game[0].betting_end_time,
-      players: players.map((p: any) => ({
-        id: String(p.id),
-        telegramId: p.telegram_id,
-        name: p.first_name || p.username || 'Oyuncu',
-        avatar: p.photo_url || '',
-        seatNumber: p.seat_number,
-        bet: p.bet || 0,
-        cards: p.cards || [],
-        status: p.status,
-        isTurn: p.is_turn,
-        balance: p.user_chips,
-      })),
+      players: players.map((p) => {
+        const player = p as GamePlayer;
+        return {
+          id: String(player.id),
+          telegramId: player.telegram_id,
+          name: player.first_name || player.username || 'Oyuncu',
+          avatar: player.photo_url || '',
+          seatNumber: player.seat_number,
+          bet: player.bet || 0,
+          cards: player.cards || [],
+          status: player.status,
+          isTurn: player.is_turn,
+          balance: player.user_chips,
+        };
+      }),
     };
 
     gameEvents.gameStateUpdate(roomId, { ...gameData, countdown, turnTimer });
@@ -190,7 +208,7 @@ async function handleReady(roomId: string, telegramId: number) {
       SELECT * FROM game_players WHERE game_id = ${gameId}
     `;
 
-    const allReady = players.every((p: any) => p.status === 'ready');
+    const allReady = players.every((p) => (p as GamePlayer).status === 'ready');
     const playerCount = players.length;
 
     if (allReady && playerCount >= 1) {
@@ -295,7 +313,7 @@ async function dealCards(roomId: string, gameId: number) {
     const game = await sql`SELECT * FROM games WHERE id = ${gameId}`;
     if (game.length === 0) return;
 
-    let deck: Card[] = game[0].deck || createDeck();
+    const deck: Card[] = game[0].deck || createDeck();
 
     // Bahis koymayan oyuncuları spectator yap
     await sql`
@@ -321,7 +339,8 @@ async function dealCards(roomId: string, gameId: number) {
     }
 
     // Oyunculara kart dağıt
-    for (const player of players) {
+    for (const p of players) {
+      const player = p as GamePlayer;
       const card1 = deck.pop()!;
       const card2 = deck.pop()!;
       const cards = [card1, card2];
@@ -353,7 +372,7 @@ async function dealCards(roomId: string, gameId: number) {
     // İlk oyuncunun sırasını işaretle
     if (activePlayers.length > 0) {
       await sql`
-        UPDATE game_players SET is_turn = true WHERE id = ${activePlayers[0].id}
+        UPDATE game_players SET is_turn = true WHERE id = ${(activePlayers[0] as GamePlayer).id}
       `;
     }
 
@@ -391,21 +410,23 @@ async function handleHit(roomId: string, telegramId: number) {
     }
 
     const gameId = game[0].id;
-    let deck: Card[] = game[0].deck;
+    const deck: Card[] = game[0].deck;
 
     // Oyuncunun sırası mı kontrol et
-    const player = await sql`
+    const playerArr = await sql`
       SELECT * FROM game_players
       WHERE game_id = ${gameId} AND telegram_id = ${telegramId} AND is_turn = true
     `;
 
-    if (player.length === 0) {
+    if (playerArr.length === 0) {
       return NextResponse.json({ error: 'Not your turn' }, { status: 400 });
     }
 
+    const player = playerArr[0] as GamePlayer;
+
     // Kart çek
     const newCard = deck.pop()!;
-    const newCards = [...(player[0].cards || []), newCard];
+    const newCards = [...(player.cards || []), newCard];
     const newScore = calculateHandValue(newCards);
 
     let newStatus = 'playing';
@@ -415,7 +436,7 @@ async function handleHit(roomId: string, telegramId: number) {
     await sql`
       UPDATE game_players
       SET cards = ${JSON.stringify(newCards)}, status = ${newStatus}
-      WHERE id = ${player[0].id}
+      WHERE id = ${player.id}
     `;
 
     await sql`
@@ -424,7 +445,7 @@ async function handleHit(roomId: string, telegramId: number) {
 
     // Bust veya 21 ise sıradaki oyuncuya geç
     if (newStatus !== 'playing') {
-      await nextPlayer(roomId, gameId, player[0].seat_number);
+      await nextPlayer(roomId, gameId, player.seat_number);
     } else {
       broadcastGameState(roomId, gameId, 0, 15);
     }
@@ -450,20 +471,22 @@ async function handleStand(roomId: string, telegramId: number) {
 
     const gameId = game[0].id;
 
-    const player = await sql`
+    const playerArr = await sql`
       SELECT * FROM game_players
       WHERE game_id = ${gameId} AND telegram_id = ${telegramId} AND is_turn = true
     `;
 
-    if (player.length === 0) {
+    if (playerArr.length === 0) {
       return NextResponse.json({ error: 'Not your turn' }, { status: 400 });
     }
 
+    const player = playerArr[0] as GamePlayer;
+
     await sql`
-      UPDATE game_players SET status = 'stand' WHERE id = ${player[0].id}
+      UPDATE game_players SET status = 'stand' WHERE id = ${player.id}
     `;
 
-    await nextPlayer(roomId, gameId, player[0].seat_number);
+    await nextPlayer(roomId, gameId, player.seat_number);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -485,22 +508,23 @@ async function handleDouble(roomId: string, telegramId: number) {
     }
 
     const gameId = game[0].id;
-    let deck: Card[] = game[0].deck;
+    const deck: Card[] = game[0].deck;
 
-    const player = await sql`
+    const playerArr = await sql`
       SELECT gp.*, u.chips as user_chips FROM game_players gp
       JOIN users u ON gp.telegram_id = u.telegram_id
       WHERE gp.game_id = ${gameId} AND gp.telegram_id = ${telegramId} AND gp.is_turn = true
     `;
 
-    if (player.length === 0) {
+    if (playerArr.length === 0) {
       return NextResponse.json({ error: 'Not your turn' }, { status: 400 });
     }
 
-    const currentBet = player[0].bet;
+    const player = playerArr[0] as GamePlayer & { user_chips: number };
+    const currentBet = player.bet;
 
     // Bakiye kontrolü
-    if (player[0].user_chips < currentBet) {
+    if ((player.user_chips ?? 0) < currentBet) {
       return NextResponse.json({ error: 'Insufficient balance for double' }, { status: 400 });
     }
 
@@ -511,7 +535,7 @@ async function handleDouble(roomId: string, telegramId: number) {
 
     // Bir kart çek
     const newCard = deck.pop()!;
-    const newCards = [...(player[0].cards || []), newCard];
+    const newCards = [...(player.cards || []), newCard];
     const newScore = calculateHandValue(newCards);
 
     const newStatus = newScore > 21 ? 'bust' : 'stand';
@@ -520,14 +544,14 @@ async function handleDouble(roomId: string, telegramId: number) {
     await sql`
       UPDATE game_players
       SET cards = ${JSON.stringify(newCards)}, status = ${newStatus}, bet = ${newBet}
-      WHERE id = ${player[0].id}
+      WHERE id = ${player.id}
     `;
 
     await sql`
       UPDATE games SET deck = ${JSON.stringify(deck)} WHERE id = ${gameId}
     `;
 
-    await nextPlayer(roomId, gameId, player[0].seat_number);
+    await nextPlayer(roomId, gameId, player.seat_number);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -554,12 +578,13 @@ async function nextPlayer(roomId: string, gameId: number, currentSeatNumber: num
     `;
 
     if (nextPlayers.length > 0) {
+      const nextP = nextPlayers[0] as GamePlayer;
       // Sıradaki oyuncuya geç
       await sql`
-        UPDATE game_players SET is_turn = true WHERE id = ${nextPlayers[0].id}
+        UPDATE game_players SET is_turn = true WHERE id = ${nextP.id}
       `;
 
-      const newIndex = nextPlayers[0].seat_number - 1; // 0-indexed
+      const newIndex = nextP.seat_number - 1; // 0-indexed
       await sql`
         UPDATE games SET current_player_index = ${newIndex} WHERE id = ${gameId}
       `;
@@ -580,8 +605,8 @@ async function dealerPlay(roomId: string, gameId: number) {
     const game = await sql`SELECT * FROM games WHERE id = ${gameId}`;
     if (game.length === 0) return;
 
-    let deck: Card[] = game[0].deck;
-    let dealerCards: Card[] = (game[0].dealer_cards || []).map((c: Card) => ({ ...c, faceUp: true }));
+    const deck: Card[] = game[0].deck;
+    const dealerCards: Card[] = (game[0].dealer_cards || []).map((c: Card) => ({ ...c, faceUp: true }));
     let dealerScore = calculateHandValue(dealerCards);
 
     // Dealer 17'ye kadar çekmeli
@@ -623,9 +648,15 @@ async function calculateResults(roomId: string, gameId: number, dealerScore: num
     `;
 
     const dealerBust = dealerScore > 21;
-    const results = [];
+    const results: {
+      telegramId: number;
+      status: string;
+      winAmount: number;
+      bet: number;
+    }[] = [];
 
-    for (const player of players) {
+    for (const p of players) {
+      const player = p as GamePlayer;
       const playerScore = calculateHandValue(player.cards || []);
       const playerHasBlackjack = player.status === 'blackjack';
 
@@ -731,18 +762,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       game: {
         ...game[0],
-        players: players.map((p: any) => ({
-          id: String(p.id),
-          telegramId: p.telegram_id,
-          name: p.first_name || p.username || 'Oyuncu',
-          avatar: p.photo_url || '',
-          seatNumber: p.seat_number,
-          bet: p.bet || 0,
-          cards: p.cards || [],
-          status: p.status,
-          isTurn: p.is_turn,
-          balance: p.user_chips,
-        })),
+        players: players.map((p) => {
+          const player = p as GamePlayer;
+          return {
+            id: String(player.id),
+            telegramId: player.telegram_id,
+            name: player.first_name || player.username || 'Oyuncu',
+            avatar: player.photo_url || '',
+            seatNumber: player.seat_number,
+            bet: player.bet || 0,
+            cards: player.cards || [],
+            status: player.status,
+            isTurn: player.is_turn,
+            balance: player.user_chips,
+          };
+        }),
       },
     });
   } catch (error) {
