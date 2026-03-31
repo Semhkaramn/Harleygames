@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Plus, Users, Coins, Trophy, RefreshCw } from 'lucide-react';
-import type { Room } from '@/types/game';
+import { Plus, Users, Coins, Trophy, RefreshCw, LogIn } from 'lucide-react';
+import type { Room, Player } from '@/types/game';
 
 export function LobbyView() {
   const {
@@ -15,7 +15,7 @@ export function LobbyView() {
     rooms,
     isConnected,
     createRoom,
-    joinRoom,
+    joinRoomAuto,
     fetchRooms,
   } = useGameStore();
 
@@ -24,7 +24,7 @@ export function LobbyView() {
   const [newRoomMinBet, setNewRoomMinBet] = useState(10);
   const [newRoomMaxBet, setNewRoomMaxBet] = useState(1000);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedSeat, setSelectedSeat] = useState<{ roomId: string; seat: number } | null>(null);
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
 
   if (!currentUser) return null;
 
@@ -35,8 +35,8 @@ export function LobbyView() {
     const roomId = await createRoom(newRoomName, newRoomMinBet, newRoomMaxBet);
 
     if (roomId) {
-      // Oluşturan kişi otomatik olarak 1. koltuğa oturur
-      await joinRoom(roomId, 1);
+      // Oluşturan kişi otomatik olarak 1. koltuğa oturur - zaten API'de yapılıyor
+      // joinRoom çağrısına gerek yok
     }
 
     setIsLoading(false);
@@ -44,11 +44,10 @@ export function LobbyView() {
     setNewRoomName('');
   };
 
-  const handleJoinRoom = async (roomId: string, seatNumber: number) => {
-    setIsLoading(true);
-    await joinRoom(roomId, seatNumber);
-    setIsLoading(false);
-    setSelectedSeat(null);
+  const handleJoinRoom = async (roomId: string) => {
+    setJoiningRoomId(roomId);
+    await joinRoomAuto(roomId);
+    setJoiningRoomId(null);
   };
 
   const handleRefresh = async () => {
@@ -172,10 +171,9 @@ export function LobbyView() {
             <RoomCard
               key={room.id}
               room={room}
-              selectedSeat={selectedSeat?.roomId === room.id ? selectedSeat.seat : null}
-              onSelectSeat={(seat) => setSelectedSeat({ roomId: room.id, seat })}
-              onJoin={(seat) => handleJoinRoom(room.id, seat)}
-              isLoading={isLoading}
+              onJoin={() => handleJoinRoom(room.id)}
+              isJoining={joiningRoomId === room.id}
+              currentUserTelegramId={currentUser.telegramId}
             />
           ))
         )}
@@ -184,25 +182,28 @@ export function LobbyView() {
   );
 }
 
-// Room Card Component
+// Room Card Component - Updated to show player avatars and direct join
 function RoomCard({
   room,
-  selectedSeat,
-  onSelectSeat,
   onJoin,
-  isLoading,
+  isJoining,
+  currentUserTelegramId,
 }: {
   room: Room;
-  selectedSeat: number | null;
-  onSelectSeat: (seat: number) => void;
-  onJoin: (seat: number) => void;
-  isLoading: boolean;
+  onJoin: () => void;
+  isJoining: boolean;
+  currentUserTelegramId: number;
 }) {
   const seats = [1, 2, 3, 4, 5, 6];
   const occupiedSeats = room.players.map(p => p.seatNumber);
+  const availableSeats = seats.filter(s => !occupiedSeats.includes(s));
+  const isFull = availableSeats.length === 0;
+  const isAlreadyInRoom = room.players.some(p => p.telegramId === currentUserTelegramId);
+  const canJoin = !isFull && !isAlreadyInRoom && room.status === 'waiting';
 
   return (
-    <div className="bg-gray-800 rounded-xl p-4">
+    <div className="bg-gray-800 rounded-xl p-4 hover:bg-gray-750 transition-colors">
+      {/* Room Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="text-white font-bold">{room.name}</h3>
@@ -230,53 +231,92 @@ function RoomCard({
         </Badge>
       </div>
 
-      {/* Seats */}
-      <div className="grid grid-cols-6 gap-2 mb-3">
-        {seats.map((seat) => {
-          const isOccupied = occupiedSeats.includes(seat);
-          const player = room.players.find(p => p.seatNumber === seat);
-          const isSelected = selectedSeat === seat;
+      {/* Seats with Player Avatars - Visual Table */}
+      <div className="bg-gray-900/50 rounded-lg p-3 mb-3">
+        <div className="grid grid-cols-6 gap-2">
+          {seats.map((seat) => {
+            const player = room.players.find(p => p.seatNumber === seat);
+            const isOccupied = !!player;
 
-          return (
-            <button
-              key={seat}
-              type="button"
-              onClick={() => !isOccupied && onSelectSeat(seat)}
-              disabled={isOccupied || room.status !== 'waiting'}
-              className={cn(
-                'aspect-square rounded-lg flex items-center justify-center transition-all',
-                isOccupied
-                  ? 'bg-gray-700'
-                  : isSelected
-                    ? 'bg-green-600 ring-2 ring-green-400'
-                    : 'bg-gray-700 hover:bg-gray-600',
-                (isOccupied || room.status !== 'waiting') && 'cursor-not-allowed opacity-50'
-              )}
-            >
-              {isOccupied && player ? (
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={player.avatar} />
-                  <AvatarFallback className="text-xs bg-gray-600">
-                    {player.name.substring(0, 1)}
-                  </AvatarFallback>
-                </Avatar>
-              ) : (
-                <span className="text-gray-500 text-xs">{seat}</span>
-              )}
-            </button>
-          );
-        })}
+            return (
+              <div
+                key={seat}
+                className={cn(
+                  'aspect-square rounded-lg flex flex-col items-center justify-center transition-all relative',
+                  isOccupied ? 'bg-gray-700' : 'bg-gray-800 border border-dashed border-gray-600'
+                )}
+              >
+                {isOccupied && player ? (
+                  <div className="relative">
+                    <Avatar className="w-8 h-8 border-2 border-green-500">
+                      <AvatarImage src={player.avatar} />
+                      <AvatarFallback className="text-xs bg-gray-600 text-white">
+                        {player.name.substring(0, 1).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* Online indicator */}
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-700" />
+                  </div>
+                ) : (
+                  <span className="text-gray-600 text-xs">{seat}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Player names row */}
+        {room.players.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {room.players.map((player) => (
+              <span
+                key={player.telegramId}
+                className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded"
+              >
+                {player.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Join Button */}
-      {selectedSeat && room.status === 'waiting' && (
+      {/* Join Button - Direct join */}
+      {canJoin && (
         <Button
-          onClick={() => onJoin(selectedSeat)}
-          disabled={isLoading}
+          onClick={onJoin}
+          disabled={isJoining}
           className="w-full bg-green-600 hover:bg-green-500"
         >
-          {isLoading ? 'Katılınıyor...' : `${selectedSeat}. Koltuğa Otur`}
+          {isJoining ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              Katılınıyor...
+            </>
+          ) : (
+            <>
+              <LogIn className="w-4 h-4 mr-2" />
+              Odaya Katıl
+            </>
+          )}
         </Button>
+      )}
+
+      {isAlreadyInRoom && (
+        <div className="text-center py-2 text-green-400 text-sm">
+          Bu odadasınız
+        </div>
+      )}
+
+      {isFull && !isAlreadyInRoom && (
+        <div className="text-center py-2 text-red-400 text-sm">
+          Oda dolu
+        </div>
+      )}
+
+      {room.status !== 'waiting' && !isAlreadyInRoom && !isFull && (
+        <div className="text-center py-2 text-yellow-400 text-sm">
+          Oyun devam ediyor - katılım kapalı
+        </div>
       )}
     </div>
   );
