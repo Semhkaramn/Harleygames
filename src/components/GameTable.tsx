@@ -13,14 +13,15 @@ interface GameTableProps {
   onBack: () => void;
 }
 
-// Mobile-optimized seat positions - semi-circle layout
+// Mobile-optimized seat positions - better layout for 6 players
+// Position 1-2: Left side, 3: Bottom left, 4: Bottom right, 5-6: Right side
 const SEAT_POSITIONS = [
-  { x: '10%', y: '55%' },
-  { x: '25%', y: '75%' },
-  { x: '50%', y: '82%' },
-  { x: '75%', y: '75%' },
-  { x: '90%', y: '55%' },
-  { x: '50%', y: '40%' },
+  { x: '15%', y: '35%' },   // Seat 1 - Top left
+  { x: '15%', y: '55%' },   // Seat 2 - Mid left
+  { x: '30%', y: '72%' },   // Seat 3 - Bottom left
+  { x: '70%', y: '72%' },   // Seat 4 - Bottom right
+  { x: '85%', y: '55%' },   // Seat 5 - Mid right
+  { x: '85%', y: '35%' },   // Seat 6 - Top right
 ];
 
 interface ServerGameState {
@@ -566,287 +567,297 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const totalActivePlayers = gamePlayers.length;
 
   return (
-    <div className="relative w-full h-[500px] overflow-hidden">
-      {/* Back Button */}
-      <button
-        type="button"
-        onClick={onBack}
-        className="absolute top-2 left-2 z-30 glass rounded-lg px-2 py-1 flex items-center gap-1 text-gray-300 hover:text-white transition-colors"
-      >
-        <span className="text-sm">←</span>
-        <span className="text-[10px]">Çık</span>
-      </button>
+    <div className="relative w-full h-[calc(100vh-120px)] min-h-[550px] max-h-[700px] overflow-hidden bg-gradient-to-b from-gray-900 to-black">
+      {/* Header Bar */}
+      <div className="absolute top-0 left-0 right-0 h-12 glass z-40 flex items-center justify-between px-3">
+        {/* Back Button */}
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-gray-300 hover:text-white transition-colors"
+        >
+          <span className="text-lg">←</span>
+          <span className="text-xs">Geri</span>
+        </button>
 
-      {/* Table Background */}
-      <div className="absolute inset-0 felt-pattern rounded-[25%] border-4 border-amber-800/80 shadow-xl" style={{
-        boxShadow: 'inset 0 0 40px rgba(0, 0, 0, 0.6)',
-      }}>
-        <div className="absolute inset-2 rounded-[25%] border border-amber-900/40" />
-        <div className="absolute top-[15%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center opacity-10">
-          <h2 className="text-xl font-bold text-amber-500" style={{ fontFamily: "'Playfair Display', serif" }}>
-            HARLEY
-          </h2>
-        </div>
-      </div>
-
-      {/* Betting Countdown Timer */}
-      {isBettingPhase && bettingCountdown > 0 && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
-          <div className={`glass rounded-full px-4 py-2 flex items-center gap-3 ${bettingCountdown <= 5 ? 'border-red-500 animate-pulse' : 'border-amber-500/30'}`}>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${bettingCountdown <= 5 ? 'text-red-400' : 'text-amber-400'}`}>
+        {/* Center - Betting Countdown or Status */}
+        <div className="flex items-center gap-2">
+          {isBettingPhase && bettingCountdown > 0 ? (
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${bettingCountdown <= 5 ? 'bg-red-500/20 border border-red-500/50' : 'bg-amber-500/20 border border-amber-500/30'}`}>
+              <div className={`text-lg font-bold ${bettingCountdown <= 5 ? 'text-red-400 animate-pulse' : 'text-amber-400'}`}>
                 {bettingCountdown}
               </div>
-              <div className="text-[8px] text-gray-400">saniye</div>
+              <div className="text-[10px] text-gray-400">saniye</div>
+              <div className="border-l border-white/20 pl-2 ml-1">
+                <span className="text-emerald-400 text-sm">{playersWithBets}/{totalActivePlayers}</span>
+                <span className="text-[8px] text-gray-400 ml-1">bahis</span>
+              </div>
             </div>
-            <div className="text-center border-l border-white/10 pl-3">
-              <div className="text-sm text-emerald-400">{playersWithBets}/{totalActivePlayers}</div>
-              <div className="text-[8px] text-gray-400">bahis</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Dealer Area */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center" style={{ marginTop: isBettingPhase ? '45px' : '0' }}>
-        <div className="mb-1 px-2 py-0.5 bg-black/60 rounded-full border border-amber-500/30">
-          <span className="text-amber-400 font-semibold text-[9px] tracking-wider">KRUPIYE</span>
-        </div>
-
-        <div className="flex -space-x-2 mb-1">
-          {gameDealer.cards.length > 0 ? (
-            gameDealer.cards.map((card, index) => (
-              <PlayingCard key={`dealer-${index}`} card={card} index={index} size="xs" />
-            ))
           ) : (
-            <div className="w-10 h-14 border-2 border-dashed border-amber-600/30 rounded-md flex items-center justify-center">
-              <span className="text-amber-600/30 text-lg">?</span>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40">
+              <div className={`w-2 h-2 rounded-full ${
+                gameStatus === 'waiting' ? 'bg-gray-400' :
+                gameStatus === 'betting' ? 'bg-amber-400 animate-pulse' :
+                gameStatus === 'playing' ? 'bg-green-400 animate-pulse' :
+                gameStatus === 'dealer-turn' ? 'bg-blue-400 animate-pulse' :
+                'bg-purple-400'
+              }`} />
+              <span className="text-xs text-gray-300">
+                {gameStatus === 'waiting' ? 'Bekleniyor' :
+                 gameStatus === 'betting' ? 'Bahis Zamanı' :
+                 gameStatus === 'playing' ? 'Oyun Devam' :
+                 gameStatus === 'dealer-turn' ? 'Krupiye' :
+                 'Sonuç'}
+              </span>
             </div>
           )}
         </div>
 
-        {gameDealer.cards.length > 0 && (
-          <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dealerScore > 21 ? 'bg-red-500' : 'bg-black/80'} text-white border border-white/10`}>
-            {gameStatus === 'results' || gameStatus === 'dealer-turn' ? (
-              dealerHasBlackjack ? 'BJ!' : dealerScore
+        {/* Room Info */}
+        <div className="text-right">
+          <div className="text-[8px] text-gray-500">Oda</div>
+          <div className="text-[10px] text-amber-400 font-mono">{roomId.slice(0, 6)}</div>
+        </div>
+      </div>
+
+      {/* Table Container */}
+      <div className="absolute top-14 left-2 right-2 bottom-2 rounded-[40px] overflow-hidden">
+        {/* Felt Background */}
+        <div className="absolute inset-0 felt-pattern border-4 border-amber-800/80" style={{
+          boxShadow: 'inset 0 0 60px rgba(0, 0, 0, 0.7), 0 8px 32px rgba(0, 0, 0, 0.5)',
+          borderRadius: '40px'
+        }}>
+          {/* Inner border */}
+          <div className="absolute inset-3 rounded-[32px] border border-amber-700/30" />
+
+          {/* Logo watermark */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
+            <h2 className="text-4xl font-bold text-amber-500 tracking-widest" style={{ fontFamily: "'Playfair Display', serif" }}>
+              HARLEY
+            </h2>
+          </div>
+        </div>
+
+        {/* Dealer Area - Top Center */}
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+          <div className="mb-2 px-3 py-1 bg-black/70 rounded-full border border-amber-500/40">
+            <span className="text-amber-400 font-semibold text-[10px] tracking-widest">KRUPİYE</span>
+          </div>
+
+          <div className="flex -space-x-3 mb-2">
+            {gameDealer.cards.length > 0 ? (
+              gameDealer.cards.map((card, index) => (
+                <PlayingCard key={`dealer-${index}`} card={card} index={index} size="sm" />
+              ))
             ) : (
-              calculateHandValue([gameDealer.cards[0]])
+              <div className="flex gap-1">
+                <div className="w-12 h-16 border-2 border-dashed border-amber-600/30 rounded-lg flex items-center justify-center bg-black/20">
+                  <span className="text-amber-600/40 text-2xl">?</span>
+                </div>
+              </div>
             )}
+          </div>
+
+          {gameDealer.cards.length > 0 && (
+            <div className={`px-3 py-1 rounded-full text-xs font-bold ${dealerScore > 21 ? 'bg-red-500' : 'bg-black/80'} text-white border border-white/20 shadow-lg`}>
+              {gameStatus === 'results' || gameStatus === 'dealer-turn' ? (
+                dealerHasBlackjack ? '🃏 BJ!' : dealerScore
+              ) : (
+                calculateHandValue([gameDealer.cards[0]])
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Player Seats */}
+        {SEAT_POSITIONS.map((position, index) => {
+          const player = gamePlayers.find((p) => p.seatNumber === index + 1);
+          const isMyPlayer = player?.id === myGamePlayerId;
+
+          return (
+            <PlayerSeat
+              key={`seat-${index + 1}`}
+              player={player}
+              seatNumber={index + 1}
+              isCurrentUser={isMyPlayer}
+              onSeatClick={() => handleJoinSeat(index + 1)}
+              onLeave={isMyPlayer ? handleLeaveSeat : undefined}
+              position={position}
+              isBettingPhase={isBettingPhase}
+            />
+          );
+        })}
+
+        {/* Current Player Hand Info - Bottom Center */}
+        {currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0 && gameStatus === 'playing' && (
+          <div className="absolute bottom-36 left-1/2 -translate-x-1/2 z-20">
+            <div className="bg-black/90 px-4 py-2 rounded-xl border border-amber-500/40 shadow-xl">
+              <span className="text-amber-400 font-bold text-lg">
+                Eliniz: {calculateHandValue(currentPlayer.cards)}
+              </span>
+            </div>
           </div>
         )}
-      </div>
 
-      {/* Player Seats */}
-      {SEAT_POSITIONS.map((position, index) => {
-        const player = gamePlayers.find((p) => p.seatNumber === index + 1);
-        const isMyPlayer = player?.id === myGamePlayerId;
+        {/* Bottom Panel - Actions/Betting/Info */}
+        <div className="absolute bottom-4 left-4 right-4 z-30">
+          {/* Betting Panel */}
+          {isBettingPhase && myGamePlayerId && !hasBetThisRound && (
+            <div className="glass rounded-2xl p-4 animate-slide-up border border-amber-500/20">
+              <div className="flex flex-col gap-3">
+                {/* Chip Selection */}
+                <div className="flex gap-2 justify-center flex-wrap">
+                  {chipValues.map((value) => (
+                    <Chip
+                      key={value}
+                      value={value}
+                      onClick={() => handleChipClick(value)}
+                      size="sm"
+                      disabled={(dbUser?.chips || 0) < selectedBet + value}
+                    />
+                  ))}
+                </div>
 
-        return (
-          <PlayerSeat
-            key={`seat-${index + 1}`}
-            player={player}
-            seatNumber={index + 1}
-            isCurrentUser={isMyPlayer}
-            onSeatClick={() => handleJoinSeat(index + 1)}
-            onLeave={isMyPlayer ? handleLeaveSeat : undefined}
-            position={position}
-            isBettingPhase={isBettingPhase}
-          />
-        );
-      })}
+                {/* Bet Amount Display */}
+                <div className="text-center py-2 bg-black/40 rounded-lg">
+                  <span className="text-gray-400 text-xs">Bahis Miktarı:</span>
+                  <span className="text-amber-400 font-bold text-2xl ml-2">{selectedBet}</span>
+                  <span className="text-gray-500 text-xs ml-2">/ {dbUser?.chips?.toLocaleString() || 0}</span>
+                </div>
 
-      {/* Betting Panel - Shows during betting phase for seated players */}
-      {isBettingPhase && myGamePlayerId && !hasBetThisRound && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 glass rounded-xl p-3 animate-slide-up w-[85%] max-w-xs z-30">
-          <h3 className="text-center text-amber-400 font-semibold mb-2 text-xs flex items-center justify-center gap-2">
-            Bahis Yap
-            <span className={`px-2 py-0.5 rounded-full ${bettingCountdown <= 5 ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
-              {bettingCountdown}s
-            </span>
-          </h3>
-
-          <div className="flex gap-1 justify-center mb-2 flex-wrap">
-            {chipValues.map((value) => (
-              <Chip
-                key={value}
-                value={value}
-                onClick={() => handleChipClick(value)}
-                size="xs"
-                disabled={(dbUser?.chips || 0) < selectedBet + value}
-              />
-            ))}
-          </div>
-
-          <div className="text-center mb-2">
-            <span className="text-gray-400 text-[10px]">Bahis:</span>
-            <span className="text-amber-400 font-bold text-lg ml-1">{selectedBet}</span>
-            <span className="text-gray-500 text-[10px] ml-2">/ {dbUser?.chips?.toLocaleString() || 0}</span>
-          </div>
-
-          <div className="flex gap-2 justify-center">
-            <button
-              type="button"
-              onClick={handleClearBet}
-              className="btn-secondary text-[10px] px-3 py-1.5"
-              disabled={isProcessing || selectedBet === 0}
-            >
-              Temizle
-            </button>
-            <button
-              type="button"
-              onClick={handleBet}
-              disabled={selectedBet === 0 || isProcessing}
-              className="btn-gold text-[10px] px-5 py-1.5 disabled:opacity-50"
-            >
-              {isProcessing ? '...' : 'Bahis Yap'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Already bet indicator */}
-      {isBettingPhase && myGamePlayerId && hasBetThisRound && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-lg px-4 py-2 animate-slide-up z-20">
-          <p className="text-emerald-400 text-xs flex items-center gap-2">
-            <span className="text-lg">✓</span>
-            Bahsiniz alındı! ({currentPlayer?.bet} chip)
-          </p>
-        </div>
-      )}
-
-      {/* Not seated - show join message */}
-      {!isInGame && gameStatus === 'waiting' && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-lg px-4 py-2">
-          <p className="text-gray-400 text-xs">Oynamak için boş bir koltuğa tıklayın</p>
-        </div>
-      )}
-
-      {/* Start Game Button - When waiting with players */}
-      {canStartBetting && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
-          <button
-            type="button"
-            onClick={handleStartGame}
-            disabled={isProcessing}
-            className="btn-gold px-6 py-2 text-sm disabled:opacity-50"
-          >
-            {isProcessing ? '...' : 'Oyunu Başlat'}
-          </button>
-        </div>
-      )}
-
-      {/* Action Buttons (Hit, Stand, Double) */}
-      {gameStatus === 'playing' && isPlayerTurn && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 animate-slide-up z-20">
-          <button
-            type="button"
-            onClick={handleHit}
-            disabled={!canHit}
-            className="btn-primary px-5 py-2 text-xs disabled:opacity-50"
-          >
-            {isProcessing ? '...' : 'Kart Al'}
-          </button>
-          <button
-            type="button"
-            onClick={handleStand}
-            disabled={!canStand}
-            className="btn-secondary px-5 py-2 text-xs disabled:opacity-50"
-          >
-            Dur
-          </button>
-          {canDouble && (
-            <button
-              type="button"
-              onClick={handleDouble}
-              className="btn-gold px-5 py-2 text-xs"
-            >
-              Katla
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Waiting for other players during playing */}
-      {gameStatus === 'playing' && !isPlayerTurn && isInGame && currentPlayer?.status === 'playing' && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-lg px-4 py-2">
-          <p className="text-gray-400 text-xs animate-pulse">Sıranızı bekleyin...</p>
-        </div>
-      )}
-
-      {/* Game Results */}
-      {gameStatus === 'results' && (
-        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 text-center animate-slide-up z-20">
-          <div className="glass rounded-xl px-4 py-3 min-w-[200px]">
-            <h3 className="text-sm font-bold text-amber-400 mb-2">Sonuçlar</h3>
-            <div className="space-y-1">
-              {gamePlayers.filter(p => p.bet > 0 || p.status === 'skipped').map((player) => {
-                const result = getResultDisplay(player);
-                return (
-                  <div key={player.id} className="flex items-center justify-between gap-4 text-xs">
-                    <span className="text-white truncate max-w-[80px]">{player.name}</span>
-                    <span className={`font-bold ${result.color}`}>
-                      {player.status === 'blackjack' && <span className="text-amber-400 mr-1">BJ!</span>}
-                      {result.text}
-                    </span>
-                  </div>
-                );
-              })}
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-center">
+                  <button
+                    type="button"
+                    onClick={handleClearBet}
+                    className="btn-secondary text-sm px-6 py-2.5 rounded-xl"
+                    disabled={isProcessing || selectedBet === 0}
+                  >
+                    Temizle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBet}
+                    disabled={selectedBet === 0 || isProcessing}
+                    className="btn-gold text-sm px-8 py-2.5 rounded-xl disabled:opacity-50 font-semibold"
+                  >
+                    {isProcessing ? '...' : 'Bahis Yap'}
+                  </button>
+                </div>
+              </div>
             </div>
-            {isInGame && (
+          )}
+
+          {/* Already Bet Indicator */}
+          {isBettingPhase && myGamePlayerId && hasBetThisRound && (
+            <div className="glass rounded-xl px-6 py-3 text-center animate-slide-up">
+              <p className="text-emerald-400 text-sm flex items-center justify-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">✓</span>
+                Bahsiniz alındı! ({currentPlayer?.bet} chip)
+              </p>
+            </div>
+          )}
+
+          {/* Not seated message */}
+          {!isInGame && gameStatus === 'waiting' && (
+            <div className="glass rounded-xl px-6 py-4 text-center">
+              <p className="text-gray-300 text-sm">Oynamak için boş bir koltuğa tıklayın</p>
+            </div>
+          )}
+
+          {/* Start Game Button */}
+          {canStartBetting && (
+            <div className="text-center">
               <button
                 type="button"
-                onClick={handleNewGame}
+                onClick={handleStartGame}
                 disabled={isProcessing}
-                className="btn-gold text-xs px-4 py-1.5 mt-3 disabled:opacity-50 w-full"
+                className="btn-gold px-10 py-3 text-base font-semibold rounded-xl disabled:opacity-50 shadow-xl"
               >
-                {isProcessing ? '...' : 'Yeni El'}
+                {isProcessing ? '...' : 'Oyunu Başlat'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Game Action Buttons */}
+          {gameStatus === 'playing' && isPlayerTurn && (
+            <div className="glass rounded-2xl p-4 animate-slide-up border border-emerald-500/30">
+              <div className="text-center mb-3 text-emerald-400 text-xs font-semibold">
+                SİZİN SIRANIZ
+              </div>
+              <div className="flex gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={handleHit}
+                  disabled={!canHit}
+                  className="btn-primary px-8 py-3 text-sm rounded-xl disabled:opacity-50 font-semibold"
+                >
+                  {isProcessing ? '...' : 'Kart Al'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStand}
+                  disabled={!canStand}
+                  className="btn-secondary px-8 py-3 text-sm rounded-xl disabled:opacity-50 font-semibold"
+                >
+                  Dur
+                </button>
+                {canDouble && (
+                  <button
+                    type="button"
+                    onClick={handleDouble}
+                    className="btn-gold px-8 py-3 text-sm rounded-xl font-semibold"
+                  >
+                    Katla
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Waiting for turn */}
+          {gameStatus === 'playing' && !isPlayerTurn && isInGame && currentPlayer?.status === 'playing' && (
+            <div className="glass rounded-xl px-6 py-3 text-center">
+              <p className="text-gray-400 text-sm animate-pulse">Sıranızı bekleyin...</p>
+            </div>
+          )}
+
+          {/* Game Results */}
+          {gameStatus === 'results' && (
+            <div className="glass rounded-2xl p-4 animate-slide-up border border-purple-500/30">
+              <h3 className="text-center text-lg font-bold text-amber-400 mb-3">Sonuçlar</h3>
+              <div className="space-y-2 mb-4 max-h-32 overflow-y-auto">
+                {gamePlayers.filter(p => p.bet > 0 || p.status === 'skipped').map((player) => {
+                  const result = getResultDisplay(player);
+                  return (
+                    <div key={player.id} className="flex items-center justify-between px-3 py-2 bg-black/30 rounded-lg">
+                      <span className="text-white text-sm truncate max-w-[100px]">{player.name}</span>
+                      <span className={`font-bold text-sm ${result.color}`}>
+                        {player.status === 'blackjack' && <span className="text-amber-400 mr-1">🃏</span>}
+                        {result.text}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {isInGame && (
+                <button
+                  type="button"
+                  onClick={handleNewGame}
+                  disabled={isProcessing}
+                  className="btn-gold text-sm px-6 py-2.5 rounded-xl w-full disabled:opacity-50 font-semibold"
+                >
+                  {isProcessing ? '...' : 'Yeni El'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Status indicator */}
-      <div className="absolute top-2 right-2 glass rounded-md px-2 py-1 z-10">
-        <div className="flex items-center gap-1">
-          <div className={`w-1.5 h-1.5 rounded-full ${
-            gameStatus === 'waiting' ? 'bg-gray-400' :
-            gameStatus === 'betting' ? 'bg-amber-400 animate-pulse' :
-            gameStatus === 'playing' ? 'bg-green-400 animate-pulse' :
-            gameStatus === 'dealer-turn' ? 'bg-blue-400 animate-pulse' :
-            'bg-purple-400'
-          }`} />
-          <span className="text-[9px] text-gray-300">
-            {gameStatus === 'waiting' ? 'Bekleniyor' :
-             gameStatus === 'betting' ? 'Bahis Zamanı' :
-             gameStatus === 'playing' ? 'Oyun' :
-             gameStatus === 'dealer-turn' ? 'Krupiye' :
-             'Sonuç'}
-          </span>
+        {/* Player Count Badge */}
+        <div className="absolute bottom-4 right-4 glass rounded-full px-3 py-1 z-20">
+          <span className="text-emerald-400 text-xs font-semibold">{gamePlayers.length}/6</span>
         </div>
-      </div>
-
-      {/* Player Score Display */}
-      {currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0 && gameStatus === 'playing' && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10">
-          <div className="bg-black/80 px-3 py-1 rounded-full border border-amber-500/30">
-            <span className="text-amber-400 font-bold text-sm">
-              Eliniz: {calculateHandValue(currentPlayer.cards)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Room info */}
-      <div className="absolute bottom-2 left-2 glass rounded-md px-2 py-1 z-10">
-        <span className="text-[8px] text-gray-400">Oda: </span>
-        <span className="text-[8px] text-amber-400 font-mono">{roomId.slice(0, 8)}</span>
-      </div>
-
-      {/* Player count */}
-      <div className="absolute bottom-2 right-2 glass rounded-md px-2 py-1 z-10">
-        <span className="text-[8px] text-gray-400">Oyuncu: </span>
-        <span className="text-[8px] text-emerald-400">{gamePlayers.length}/6</span>
       </div>
     </div>
   );
