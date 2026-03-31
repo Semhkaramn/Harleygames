@@ -136,10 +136,18 @@ export default function Home() {
       const response = await fetch('/api/rooms');
       const data = await response.json();
       if (data.rooms) {
-        setRooms(data.rooms.map((r: any) => ({
+        setRooms(data.rooms.map((r: {
+          id: string;
+          name: string;
+          player_count?: string | number;
+          max_players?: number;
+          min_bet?: number;
+          max_bet?: number;
+          status?: string;
+        }) => ({
           id: r.id,
           name: r.name,
-          players: parseInt(r.player_count) || 0,
+          players: parseInt(String(r.player_count)) || 0,
           maxPlayers: r.max_players || 6,
           minBet: r.min_bet || 10,
           maxBet: r.max_bet || 1000,
