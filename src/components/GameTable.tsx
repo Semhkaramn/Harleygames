@@ -13,14 +13,14 @@ interface GameTableProps {
   onBack: () => void;
 }
 
-// Mobil için seat positions - daha kompakt yarım daire
+// Mobile-optimized seat positions - semi-circle layout
 const SEAT_POSITIONS = [
-  { x: '8%', y: '65%' },
-  { x: '28%', y: '80%' },
+  { x: '8%', y: '60%' },
+  { x: '25%', y: '78%' },
   { x: '50%', y: '85%' },
-  { x: '72%', y: '80%' },
-  { x: '92%', y: '65%' },
-  { x: '50%', y: '50%' },
+  { x: '75%', y: '78%' },
+  { x: '92%', y: '60%' },
+  { x: '50%', y: '45%' },
 ];
 
 interface ServerGameState {
@@ -31,11 +31,13 @@ interface ServerGameState {
   dealer_score: number;
   deck: Card[];
   current_player_index: number;
+  betting_countdown?: number;
   players: {
     id: string;
     telegramId: number;
     name: string;
     avatar: string;
+    photoUrl?: string;
     seatNumber: number;
     bet: number;
     cards: Card[];
@@ -44,8 +46,10 @@ interface ServerGameState {
   }[];
 }
 
+const BETTING_DURATION = 15; // 15 seconds for betting
+
 export function GameTable({ roomId, onBack }: GameTableProps) {
-  const { dbUser, setDbUser } = useUserStore();
+  const { dbUser, setDbUser, setChips } = useUserStore();
   const { showNotification } = useUIStore();
 
   const [serverGame, setServerGame] = useState<ServerGameState | null>(null);
@@ -54,7 +58,10 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const [selectedBet, setSelectedBet] = useState(0);
   const [showBetPanel, setShowBetPanel] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [bettingCountdown, setBettingCountdown] = useState(0);
+  const [hasBetThisRound, setHasBetThisRound] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   const chipValues = [5, 10, 25, 50, 100];
 
@@ -76,12 +83,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       });
       const data = await response.json();
       if (data.success && data.user) {
-        setDbUser(data.user);
+        setChips(Number(data.user.chips));
       }
     } catch (error) {
       console.error('Failed to refresh user data:', error);
     }
-  }, [dbUser, setDbUser]);
+  }, [dbUser, setChips]);
 
   // Trigger dealer play
   const triggerDealerPlay = useCallback(async () => {
@@ -130,8 +137,19 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
           }
         }
 
+        // Handle betting countdown
+        if (data.game.status === 'betting' && data.game.betting_countdown !== undefined) {
+          setBettingCountdown(data.game.betting_countdown);
+        }
+
         if (data.game.status === 'dealer-turn') {
           triggerDealerPlay();
+        }
+
+        // Reset hasBetThisRound when new game starts
+        if (data.game.status === 'waiting') {
+          setHasBetThisRound(false);
+          setSelectedBet(0);
         }
       }
     } catch (error) {
@@ -143,7 +161,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   useEffect(() => {
     if (roomId) {
       fetchGameState();
-      pollingRef.current = setInterval(fetchGameState, 2000);
+      pollingRef.current = setInterval(fetchGameState, 1500);
 
       return () => {
         if (pollingRef.current) {
@@ -153,7 +171,31 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   }, [roomId, fetchGameState]);
 
-  // Handle joining a seat
+  // Local betting countdown timer
+  useEffect(() => {
+    if (serverGame?.status === 'betting' && bettingCountdown > 0) {
+      countdownRef.current = setInterval(() => {
+        setBettingCountdown(prev => {
+          if (prev <= 1) {
+            // Time's up - if no bet placed, skip this round
+            if (!hasBetThisRound && myGamePlayerId) {
+              // Player skips this round
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (countdownRef.current) {
+          clearInterval(countdownRef.current);
+        }
+      };
+    }
+  }, [serverGame?.status, bettingCountdown, hasBetThisRound, myGamePlayerId]);
+
+  // Handle joining a seat (no bet selection, just sit down)
   const handleJoinSeat = async (seatNumber: number) => {
     if (!dbUser || !roomId) return;
 
@@ -173,8 +215,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       const data = await response.json();
       if (data.success) {
         await fetchGameState();
-        setShowBetPanel(true);
         hapticFeedback('medium');
+        showNotification('success', 'Koltuğa oturdunuz! Oyun başlamasını bekleyin.');
       } else {
         showNotification('error', data.error || 'Koltuğa oturulamadı');
       }
@@ -185,9 +227,9 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle placing bet
+  // Handle placing bet during betting phase
   const handleBet = async () => {
-    if (!myGamePlayerId || !roomId || selectedBet === 0 || isProcessing) return;
+    if (!myGamePlayerId || !roomId || selectedBet === 0 || isProcessing || hasBetThisRound) return;
 
     setIsProcessing(true);
     try {
@@ -204,15 +246,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       const data = await response.json();
       if (data.success) {
-        setSelectedBet(0);
+        setHasBetThisRound(true);
         setShowBetPanel(false);
         await fetchGameState();
         await refreshUserData();
         hapticFeedback('success');
-
-        setTimeout(async () => {
-          await handleDeal();
-        }, 500);
+        showNotification('success', `${selectedBet} chip bahis yapıldı!`);
       } else {
         showNotification('error', data.error || 'Bahis yapılamadı');
       }
@@ -223,7 +262,39 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle deal cards
+  // Start new game with betting phase
+  const handleStartGame = async () => {
+    if (!roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'start_betting',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.game) {
+        setBettingCountdown(BETTING_DURATION);
+        setHasBetThisRound(false);
+        setSelectedBet(0);
+        setShowBetPanel(true);
+        await fetchGameState();
+        hapticFeedback('medium');
+        showNotification('info', 'Bahis zamanı başladı! 15 saniye içinde bahsinizi yapın.');
+      }
+    } catch (error) {
+      console.error('Start game error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Deal cards after betting phase
   const handleDeal = async () => {
     if (!roomId || isProcessing) return;
 
@@ -366,6 +437,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       const data = await response.json();
       if (data.game) {
+        setHasBetThisRound(false);
+        setSelectedBet(0);
         await fetchGameState();
         setShowBetPanel(true);
         hapticFeedback('medium');
@@ -412,6 +485,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     id: p.id,
     name: p.name,
     avatar: p.avatar,
+    photoUrl: p.photoUrl,
     chips: dbUser?.telegram_id === p.telegramId ? (dbUser?.chips || 0) : 0,
     bet: p.bet,
     cards: p.cards || [],
@@ -431,26 +505,44 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const canHit = isPlayerTurn && currentPlayer?.status === 'playing' && !isProcessing;
   const canStand = canHit;
   const canDouble = canHit && (currentPlayer?.cards?.length || 0) === 2 && (dbUser?.chips || 0) >= (currentPlayer?.bet || 0);
+  const isBettingPhase = gameStatus === 'betting';
+  const isWaitingForPlayers = gameStatus === 'waiting' && gamePlayers.length > 0;
+  const canStartBetting = isWaitingForPlayers && gamePlayers.some(p => p.id === myGamePlayerId);
 
   const dealerScore = calculateHandValue(gameDealer.cards);
   const dealerHasBlackjack = isBlackjack(gameDealer.cards);
 
   return (
-    <div className="relative w-full h-[420px] overflow-hidden">
+    <div className="relative w-full h-[480px] overflow-hidden">
       {/* Table Background */}
       <div className="absolute inset-0 felt-pattern rounded-[30%] border-4 border-amber-800/80 shadow-xl" style={{
         boxShadow: 'inset 0 0 40px rgba(0, 0, 0, 0.6)',
       }}>
         <div className="absolute inset-2 rounded-[30%] border border-amber-900/40" />
-        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center opacity-10">
+        <div className="absolute top-[18%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center opacity-10">
           <h2 className="text-2xl font-bold text-amber-500" style={{ fontFamily: "'Playfair Display', serif" }}>
             HARLEY
           </h2>
         </div>
       </div>
 
+      {/* Betting Countdown Timer */}
+      {isBettingPhase && bettingCountdown > 0 && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
+          <div className={`glass rounded-full px-4 py-2 flex items-center gap-2 ${bettingCountdown <= 5 ? 'border-red-500 animate-pulse' : 'border-amber-500/30'}`}>
+            <div className="text-xl">⏱️</div>
+            <div className="text-center">
+              <div className={`text-lg font-bold ${bettingCountdown <= 5 ? 'text-red-400' : 'text-amber-400'}`}>
+                {bettingCountdown}s
+              </div>
+              <div className="text-[9px] text-gray-400">Bahis Süresi</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dealer Area */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center" style={{ marginTop: isBettingPhase ? '50px' : '0' }}>
         <div className="mb-1 px-2 py-0.5 bg-black/60 rounded-full border border-amber-500/30">
           <span className="text-amber-400 font-semibold text-[10px] tracking-wider">KRUPIYE</span>
         </div>
@@ -489,14 +581,21 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             isCurrentUser={isMyPlayer}
             onSeatClick={() => handleJoinSeat(index + 1)}
             position={position}
+            isBettingPhase={isBettingPhase}
           />
         );
       })}
 
-      {/* Betting Panel */}
-      {showBetPanel && (gameStatus === 'betting' || gameStatus === 'waiting') && (!currentPlayer || currentPlayer.bet === 0) && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 glass rounded-xl p-3 animate-slide-up w-[90%] max-w-xs">
-          <h3 className="text-center text-amber-400 font-semibold mb-2 text-xs">Bahis Yap</h3>
+      {/* Betting Panel - Shows during betting phase */}
+      {isBettingPhase && myGamePlayerId && !hasBetThisRound && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 glass rounded-xl p-3 animate-slide-up w-[90%] max-w-xs z-30">
+          <h3 className="text-center text-amber-400 font-semibold mb-2 text-xs flex items-center justify-center gap-2">
+            <span>💰</span>
+            Bahis Yap
+            <span className={`text-xs ${bettingCountdown <= 5 ? 'text-red-400' : 'text-gray-400'}`}>
+              ({bettingCountdown}s)
+            </span>
+          </h3>
 
           <div className="flex gap-1 justify-center mb-2 flex-wrap">
             {chipValues.map((value) => (
@@ -540,6 +639,30 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         </div>
       )}
 
+      {/* Already bet indicator */}
+      {isBettingPhase && myGamePlayerId && hasBetThisRound && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-lg px-4 py-2 animate-slide-up">
+          <p className="text-emerald-400 text-sm flex items-center gap-2">
+            <span>✓</span>
+            Bahsiniz alındı! Diğer oyuncular bekleniyor...
+          </p>
+        </div>
+      )}
+
+      {/* Start Game Button - When waiting with players */}
+      {canStartBetting && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+          <button
+            type="button"
+            onClick={handleStartGame}
+            disabled={isProcessing}
+            className="btn-gold px-6 py-2 text-sm disabled:opacity-50"
+          >
+            {isProcessing ? '...' : 'Oyunu Başlat'}
+          </button>
+        </div>
+      )}
+
       {/* Action Buttons (Hit, Stand, Double) */}
       {gameStatus === 'playing' && isPlayerTurn && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 animate-slide-up">
@@ -576,7 +699,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 text-center animate-slide-up">
           <div className="glass rounded-lg px-4 py-2">
             <h3 className="text-sm font-bold text-amber-400 mb-1">Sonuçlar</h3>
-            {gamePlayers.map((player) => {
+            {gamePlayers.filter(p => p.bet > 0).map((player) => {
               const result = getResultDisplay(player);
               return (
                 <div key={player.id} className="flex items-center justify-between gap-3 text-xs">
@@ -612,7 +735,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
           }`} />
           <span className="text-[9px] text-gray-300">
             {gameStatus === 'waiting' ? 'Bekleniyor' :
-             gameStatus === 'betting' ? 'Bahis' :
+             gameStatus === 'betting' ? 'Bahis Zamanı' :
              gameStatus === 'playing' ? 'Oyun' :
              gameStatus === 'dealer-turn' ? 'Krupiye' :
              'Sonuç'}
@@ -622,7 +745,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       {/* Player Score Display */}
       {currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0 && gameStatus === 'playing' && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
           <div className="bg-black/80 px-3 py-1 rounded-full border border-amber-500/30">
             <span className="text-amber-400 font-bold text-sm">
               {calculateHandValue(currentPlayer.cards)}
@@ -635,6 +758,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       <div className="absolute bottom-2 left-2 glass rounded-md px-2 py-1">
         <span className="text-[8px] text-gray-400">Oda: </span>
         <span className="text-[8px] text-amber-400 font-mono">{roomId.slice(0, 8)}</span>
+      </div>
+
+      {/* Player count */}
+      <div className="absolute bottom-2 right-2 glass rounded-md px-2 py-1">
+        <span className="text-[8px] text-gray-400">Oyuncu: </span>
+        <span className="text-[8px] text-emerald-400">{gamePlayers.length}/6</span>
       </div>
     </div>
   );
