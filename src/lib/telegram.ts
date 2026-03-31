@@ -182,32 +182,3 @@ export function getInitData(): string {
   const webApp = getTelegramWebApp();
   return webApp?.initData || '';
 }
-
-// Mock user for development - Dynamic ID to avoid conflicts
-export function getMockUser(): TelegramUser {
-  // Use localStorage to persist mock user ID across sessions
-  if (typeof window !== 'undefined') {
-    let mockId = localStorage.getItem('harley_mock_user_id');
-    if (!mockId) {
-      // Generate a random ID that won't conflict with real Telegram IDs
-      mockId = String(Math.floor(Math.random() * 900000000) + 100000000);
-      localStorage.setItem('harley_mock_user_id', mockId);
-    }
-    return {
-      id: parseInt(mockId, 10),
-      first_name: 'Misafir',
-      last_name: '',
-      username: `guest_${mockId.slice(-4)}`,
-      language_code: 'tr',
-    };
-  }
-
-  // Fallback for SSR
-  return {
-    id: Math.floor(Math.random() * 900000000) + 100000000,
-    first_name: 'Misafir',
-    last_name: '',
-    username: 'guest',
-    language_code: 'tr',
-  };
-}
