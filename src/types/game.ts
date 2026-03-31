@@ -42,7 +42,8 @@ export type TableStatus =
   | 'betting'      // Bet alma
   | 'dealing'      // Kart dağıtımı
   | 'playing'      // Oyun devam ediyor
-  | 'dealer_turn'  // Krupiye oynuyor
+  | 'dealer_turn'  // Krupiye oynuyor (client)
+  | 'dealer-turn'  // Krupiye oynuyor (API uyumluluğu)
   | 'results'      // Sonuçlar gösteriliyor
   | 'between_rounds'; // Eller arası
 
