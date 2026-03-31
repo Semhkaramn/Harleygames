@@ -17,10 +17,10 @@ export async function GET(request: NextRequest) {
     const telegramId = request.nextUrl.searchParams.get('telegram_id');
 
     // Liderlik tablosu
-    const leaderboard = await getLeaderboard(Math.min(limit, 100));
+    const leaderboardData = await getLeaderboard(Math.min(limit, 100)) as LeaderboardUser[];
 
     // Kullanıcının sıralaması (opsiyonel)
-    let userRank = null;
+    let userRank: number | string | null = null;
     let userData = null;
 
     if (telegramId) {
@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
 
       if (userData) {
         // Kullanıcının sıralamasını bul
-        const index = leaderboard.findIndex(
-          (u: { telegram_id: number | bigint }) => u.telegram_id.toString() === telegramId
+        const index = leaderboardData.findIndex(
+          (u) => u.telegram_id.toString() === telegramId
         );
 
         if (index !== -1) {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      leaderboard: leaderboard.map((user: LeaderboardUser, index: number) => ({
+      leaderboard: leaderboardData.map((user, index) => ({
         rank: index + 1,
         telegram_id: user.telegram_id,
         username: user.username,
