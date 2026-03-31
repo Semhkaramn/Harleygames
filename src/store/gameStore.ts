@@ -184,7 +184,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!activeTable) return;
 
     // Aktif oyundaysa çıkamaz, disconnected olarak işaretle
-    if (['dealing', 'playing', 'dealer_turn'].includes(activeTable.status)) {
+    // Status tutarsızlığı düzeltildi: 'dealer-turn' yerine 'dealer_turn' kullanılıyor
+    if (['dealing', 'playing', 'dealer_turn', 'dealer-turn'].includes(activeTable.status)) {
       const updatedPlayers = activeTable.players.map(p =>
         p.isCurrentUser ? { ...p, status: 'disconnected' as PlayerStatus } : p
       );
@@ -315,6 +316,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!currentPlayer || !currentPlayer.isCurrentUser) return;
     if (currentPlayer.bet > currentUser.balance) return;
 
+    // Double down için 2 kart kontrolü eklendi
+    if (currentPlayer.cards.length !== 2) return;
+
+    // Blackjack ile double down yapılamaz kontrolü eklendi
+    const currentScore = calculateHandValue(currentPlayer.cards);
+    if (currentScore === 21 && currentPlayer.cards.length === 2) return;
+
     const newCard = drawCard();
     const newCards = [...currentPlayer.cards, newCard];
     const newScore = calculateHandValue(newCards);
@@ -359,10 +367,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Oyuncuları betting moduna geçir ve botlar için otomatik bahis koy
     const updatedPlayers = activeTable.players.map(p => {
       if (!p.isCurrentUser) {
-        // Bot için rastgele bahis belirle
+        // Bot için rastgele bahis belirle - BAKİYE KONTROLÜ EKLENDİ
         const minBet = activeTable.minBet;
+        // Bakiye yetersizse bot bahis koyamaz
+        if (p.balance < minBet) {
+          return {
+            ...p,
+            status: 'spectating' as PlayerStatus,
+            cards: [],
+            totalScore: 0,
+            bet: 0,
+          };
+        }
         const maxBet = Math.min(activeTable.maxBet, p.balance);
-        const betOptions = [minBet, minBet * 2, minBet * 5, Math.floor(maxBet / 2)].filter(b => b <= maxBet && b >= minBet);
+        const betOptions = [minBet, minBet * 2, minBet * 5, Math.floor(maxBet / 2)].filter(b => b <= maxBet && b >= minBet && b <= p.balance);
         const randomBet = betOptions[Math.floor(Math.random() * betOptions.length)] || minBet;
 
         return {
@@ -514,6 +532,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const dealerScore = activeTable.dealerScore;
     const dealerBust = dealerScore > 21;
+    // Dealer blackjack kontrolü eklendi
+    const dealerHasBlackjack = dealerScore === 21 && activeTable.dealerCards.length === 2;
 
     let balanceChange = 0;
 
@@ -525,17 +545,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       let status: PlayerStatus;
       let winAmount = 0;
 
+      // Oyuncu blackjack kontrolü
+      const playerHasBlackjack = p.status === 'blackjack';
+
       if (p.status === 'bust') {
         status = 'lost';
         winAmount = 0;
-      } else if (p.status === 'blackjack') {
-        if (dealerScore === 21 && activeTable.dealerCards.length === 2) {
-          status = 'push';
-          winAmount = p.bet;
-        } else {
-          status = 'won';
-          winAmount = p.bet * 2.5;
-        }
+      } else if (playerHasBlackjack && dealerHasBlackjack) {
+        // Her ikisi de blackjack - Push
+        status = 'push';
+        winAmount = p.bet;
+      } else if (playerHasBlackjack) {
+        // Sadece oyuncu blackjack
+        status = 'won';
+        // Blackjack kazancı düzeltildi: Math.floor ile tam sayıya yuvarla
+        winAmount = Math.floor(p.bet * 2.5);
+      } else if (dealerHasBlackjack) {
+        // Sadece dealer blackjack - Oyuncu kaybeder
+        status = 'lost';
+        winAmount = 0;
       } else if (dealerBust) {
         status = 'won';
         winAmount = p.bet * 2;
