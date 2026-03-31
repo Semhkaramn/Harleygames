@@ -21,6 +21,7 @@ export async function initializeDatabase() {
         first_name VARCHAR(255),
         last_name VARCHAR(255),
         avatar VARCHAR(50) DEFAULT '🎭',
+        photo_url TEXT,
         chips BIGINT DEFAULT 1000,
         total_wins INT DEFAULT 0,
         total_losses INT DEFAULT 0,
@@ -29,6 +30,11 @@ export async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+
+    // photo_url column ekle (eğer yoksa)
+    await sql`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT
+    `.catch(() => {/* column already exists */});
 
     // Oyun odaları tablosu
     await sql`
@@ -120,14 +126,16 @@ export async function createUser(userData: {
   username?: string;
   first_name?: string;
   last_name?: string;
+  photo_url?: string;
 }) {
   const result = await sql`
-    INSERT INTO users (telegram_id, username, first_name, last_name)
-    VALUES (${userData.telegram_id}, ${userData.username || null}, ${userData.first_name || null}, ${userData.last_name || null})
+    INSERT INTO users (telegram_id, username, first_name, last_name, photo_url)
+    VALUES (${userData.telegram_id}, ${userData.username || null}, ${userData.first_name || null}, ${userData.last_name || null}, ${userData.photo_url || null})
     ON CONFLICT (telegram_id) DO UPDATE SET
       username = COALESCE(EXCLUDED.username, users.username),
       first_name = COALESCE(EXCLUDED.first_name, users.first_name),
       last_name = COALESCE(EXCLUDED.last_name, users.last_name),
+      photo_url = COALESCE(EXCLUDED.photo_url, users.photo_url),
       updated_at = CURRENT_TIMESTAMP
     RETURNING *
   `;
