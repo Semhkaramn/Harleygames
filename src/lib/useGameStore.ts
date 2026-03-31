@@ -6,6 +6,7 @@ import {
   type GameStatus,
   createDeck,
   calculateHandValue,
+  calculateFullHandValue,
   isBlackjack,
   isBust,
   AVATARS,
@@ -251,7 +252,8 @@ export function useGameStore() {
           return { ...player, status: 'lose' as const };
         }
 
-        const playerScore = calculateHandValue(player.cards);
+        // Oyuncu ve dealer skorlarını hesapla (tüm kartlar açık)
+        const playerScore = calculateFullHandValue(player.cards);
         const playerHasBlackjack = isBlackjack(player.cards);
         const dealerHasBlackjack = isBlackjack(dealerCards);
 
