@@ -15,7 +15,7 @@ import {
 
 export default function Home() {
   const { currentView, setCurrentView, showNotification, notification, clearNotification, showBonusModal, setShowBonusModal } = useUIStore();
-  const { telegramUser, dbUser, isLoading, setTelegramUser, setDbUser, setLoading, updateChips } = useUserStore();
+  const { telegramUser, dbUser, isLoading, setTelegramUser, setDbUser, setLoading, setChips } = useUserStore();
   const { setRooms } = useRoomStore();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -61,14 +61,22 @@ export default function Home() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             initData: typeof window !== 'undefined' ? window.Telegram?.WebApp?.initData : '',
-            user,
+            user: {
+              ...user,
+              photo_url: user.photo_url, // Include photo_url from Telegram
+            },
           }),
         });
 
         const data = await response.json();
 
         if (data.success && data.user) {
-          setDbUser(data.user);
+          // Ensure chips is a number
+          setDbUser({
+            ...data.user,
+            chips: Number(data.user.chips),
+            photo_url: data.user.photo_url || user.photo_url,
+          });
           hapticFeedback('success');
 
           // Bonus durumunu kontrol et
@@ -90,6 +98,21 @@ export default function Home() {
 
     init();
   }, [setTelegramUser, setDbUser, setLoading]);
+
+  // Sync user data from server periodically
+  const syncUserData = useCallback(async () => {
+    if (!dbUser?.telegram_id) return;
+    try {
+      const response = await fetch(`/api/auth?telegram_id=${dbUser.telegram_id}`);
+      const data = await response.json();
+      if (data.user) {
+        // Only update chips to sync with server
+        setChips(Number(data.user.chips));
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+    }
+  }, [dbUser?.telegram_id, setChips]);
 
   // Bonus durumunu kontrol et
   const checkBonusStatus = async (telegramId: number) => {
@@ -116,7 +139,8 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        updateChips(data.amount);
+        // Use setChips to sync with server value
+        setChips(Number(data.new_balance));
         showNotification('success', `${data.amount} chip bonus alındı!`);
         setBonusStatus({ available: false, remaining_hours: 24 });
         hapticFeedback('success');
@@ -263,10 +287,34 @@ export default function Home() {
     }
   };
 
-  const handleBackToLobby = () => {
+  // Leave room and cleanup
+  const handleBackToLobby = async () => {
+    if (selectedRoomId && dbUser) {
+      try {
+        // Leave room via API
+        await fetch('/api/rooms', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'leave',
+            room_id: selectedRoomId,
+            telegram_id: dbUser.telegram_id,
+          }),
+        });
+
+        // Sync user data to get updated chips
+        await syncUserData();
+      } catch (error) {
+        console.error('Leave room error:', error);
+      }
+    }
+
     setSelectedRoomId(null);
     setCurrentView('lobby');
     hapticFeedback('light');
+
+    // Refresh rooms after leaving
+    fetchRooms();
   };
 
   // Loading screen
@@ -389,6 +437,7 @@ export default function Home() {
         userChips={dbUser?.chips || 0}
         userName={dbUser?.first_name || telegramUser?.first_name || ''}
         userAvatar={dbUser?.avatar || '🎭'}
+        userPhotoUrl={dbUser?.photo_url || telegramUser?.photo_url}
         onBack={currentView !== 'lobby' ? handleBackToLobby : undefined}
       />
 
