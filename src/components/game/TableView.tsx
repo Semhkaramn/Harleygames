@@ -70,23 +70,7 @@ export function TableView() {
     return () => clearTimeout(timeout);
   }, [activeTable?.currentPlayerIndex, activeTable?.status, simulateBotActions]);
 
-  // Bot bet verme (betting aşamasında)
-  useEffect(() => {
-    if (!activeTable) return;
-    if (activeTable.status !== 'betting') return;
-
-    // Botlar otomatik bet verir
-    const botsWithoutBet = activeTable.players.filter(p => !p.isCurrentUser && p.bet === 0);
-
-    if (botsWithoutBet.length > 0) {
-      const timeout = setTimeout(() => {
-        // Botların betlerini store'da güncelle (basit simülasyon)
-        // Bu gerçek bir multiplayer oyunda sunucuda yapılır
-      }, 500);
-
-      return () => clearTimeout(timeout);
-    }
-  }, [activeTable?.status]);
+  // Bot bahisleri artık startBetting fonksiyonunda otomatik olarak veriliyor
 
   // Leave on browser close
   useEffect(() => {
