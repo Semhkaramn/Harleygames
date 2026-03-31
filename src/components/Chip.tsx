@@ -6,7 +6,7 @@ interface ChipProps {
   value: number;
   onClick?: () => void;
   selected?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   disabled?: boolean;
   animate?: boolean;
   index?: number;
@@ -26,6 +26,7 @@ export function Chip({ value, onClick, selected = false, size = 'md', disabled =
   const colors = CHIP_COLORS[value] || CHIP_COLORS[100];
 
   const sizeConfig = {
+    xs: { size: 'w-8 h-8', font: 'text-[8px]', inner: 'inset-[1px]', dashed: 'inset-[3px]' },
     sm: { size: 'w-10 h-10', font: 'text-[10px]', inner: 'inset-[2px]', dashed: 'inset-[4px]' },
     md: { size: 'w-12 h-12', font: 'text-xs', inner: 'inset-[3px]', dashed: 'inset-[5px]' },
     lg: { size: 'w-14 h-14', font: 'text-sm', inner: 'inset-[4px]', dashed: 'inset-[6px]' },
@@ -110,7 +111,7 @@ export function Chip({ value, onClick, selected = false, size = 'md', disabled =
           style={{
             top: '50%',
             left: '50%',
-            transform: `rotate(${i * 45}deg) translateY(-${size === 'sm' ? 16 : size === 'md' ? 20 : 24}px) translate(-50%, -50%)`,
+            transform: `rotate(${i * 45}deg) translateY(-${size === 'xs' ? 12 : size === 'sm' ? 16 : size === 'md' ? 20 : 24}px) translate(-50%, -50%)`,
           }}
         />
       ))}
