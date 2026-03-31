@@ -356,13 +356,31 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { activeTable } = get();
     if (!activeTable) return;
 
-    // Bet vermemiş oyuncuları spectating yap
-    const updatedPlayers = activeTable.players.map(p => ({
-      ...p,
-      status: 'betting' as PlayerStatus,
-      cards: [],
-      totalScore: 0,
-    }));
+    // Oyuncuları betting moduna geçir ve botlar için otomatik bahis koy
+    const updatedPlayers = activeTable.players.map(p => {
+      if (!p.isCurrentUser) {
+        // Bot için rastgele bahis belirle
+        const minBet = activeTable.minBet;
+        const maxBet = Math.min(activeTable.maxBet, p.balance);
+        const betOptions = [minBet, minBet * 2, minBet * 5, Math.floor(maxBet / 2)].filter(b => b <= maxBet && b >= minBet);
+        const randomBet = betOptions[Math.floor(Math.random() * betOptions.length)] || minBet;
+
+        return {
+          ...p,
+          status: 'ready' as PlayerStatus,
+          cards: [],
+          totalScore: 0,
+          bet: randomBet,
+          balance: p.balance - randomBet,
+        };
+      }
+      return {
+        ...p,
+        status: 'betting' as PlayerStatus,
+        cards: [],
+        totalScore: 0,
+      };
+    });
 
     const updatedTable: Table = {
       ...activeTable,
