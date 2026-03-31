@@ -129,15 +129,26 @@ export async function createUser(userData: {
 }
 
 export async function updateUserChips(telegramId: number, amount: number, type: 'add' | 'subtract') {
-  const operator = type === 'add' ? '+' : '-';
-  const result = await sql`
-    UPDATE users SET
-      chips = chips ${operator === '+' ? sql`+` : sql`-`} ${Math.abs(amount)},
-      updated_at = CURRENT_TIMESTAMP
-    WHERE telegram_id = ${telegramId}
-    RETURNING *
-  `;
-  return result[0];
+  // Use separate queries for add and subtract to avoid SQL injection
+  if (type === 'add') {
+    const result = await sql`
+      UPDATE users SET
+        chips = chips + ${Math.abs(amount)},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE telegram_id = ${telegramId}
+      RETURNING *
+    `;
+    return result[0];
+  } else {
+    const result = await sql`
+      UPDATE users SET
+        chips = chips - ${Math.abs(amount)},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE telegram_id = ${telegramId}
+      RETURNING *
+    `;
+    return result[0];
+  }
 }
 
 export async function addChips(telegramId: number, amount: number) {
