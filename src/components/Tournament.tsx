@@ -84,13 +84,13 @@ export function TournamentList({ onJoinTournament }: TournamentListProps) {
     return `${hours}s ${minutes}d`;
   };
 
-  const statusColors = {
+  const statusColors: Record<'registering' | 'running' | 'finished', string> = {
     registering: 'text-amber-400 bg-amber-400/10',
     running: 'text-green-400 bg-green-400/10',
     finished: 'text-gray-400 bg-gray-400/10',
   };
 
-  const statusText = {
+  const statusText: Record<'registering' | 'running' | 'finished', string> = {
     registering: 'Kayıt Açık',
     running: 'Devam Ediyor',
     finished: 'Tamamlandı',
