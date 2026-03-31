@@ -5,6 +5,7 @@
 **Proje Tipi:** Next.js 15 + Tailwind + Telegram WebApp
 **Veritabanı:** Neon PostgreSQL (serverless)
 **Oyun:** Multiplayer Blackjack
+**Deploy:** Netlify (dynamic site)
 
 ---
 
@@ -18,63 +19,62 @@
 - [x] Liderlik tablosu (leaderboard/route.ts)
 - [x] Oda oluşturma/katılma (rooms/route.ts)
 - [x] Temel oyun mekaniği (game/route.ts)
-- [x] Double down API endpoint eklendi
-- [x] Oda temizleme mekanizması eklendi
+- [x] Double down API endpoint
+- [x] Oda temizleme mekanizması
 - [x] Race condition düzeltildi (SELECT FOR UPDATE)
-- [x] Telegram bot grup desteği eklendi
-- [x] Deck tükenme kontrolü eklendi
-- [x] Blackjack kazanç hesabı (2.5x) doğru
+- [x] Telegram bot grup desteği
+- [x] Deck tükenme kontrolü
+- [x] Blackjack kazanç hesabı (2.5x)
 - [x] UI Bileşenleri (Header, Lobby, GameTable, PlayerSeat, PlayingCard, Chip, Leaderboard)
 - [x] Zustand store yapısı (user, room, game, ui stores)
 - [x] Animasyonlar ve görsel efektler
+- [x] @neondatabase/serverless paketi eklendi
+- [x] GameTable server API entegrasyonu (polling ile)
+- [x] Gerçek zamanlı oyun state senkronizasyonu
+- [x] Server-side chip güncelleme
+- [x] Multiplayer desteği (server mode)
+- [x] Demo/Local mode (offline oyun)
 
 ---
 
-## 🟡 İYİLEŞTİRİLMESİ GEREKEN ALANLAR
+## 🟡 DEVAM EDEN İŞLER
 
-### 1. Multiplayer Sync Problemi
-**Durum:** Önemli
-**Açıklama:** GameTable.tsx şu an local state kullanıyor. Server ile gerçek zamanlı senkronizasyon yok.
-**Çözüm:** Polling veya WebSocket ile server state'i senkronize et
+### 1. Bağımlılıkları Yükleme
+**Durum:** Bekliyor
+**Açıklama:** `bun install` komutu çalıştırılmalı
 
-### 2. Server-Side Chip Sync
-**Durum:** Önemli
-**Açıklama:** Oyun sonuçları sunucuya düzgün yansımıyor, local değişiklikler API'ye gönderilmiyor
-**Çözüm:** Her oyun aksiyonunda API çağrısı yap
+### 2. Dev Server Başlatma
+**Durum:** Bekliyor
+**Açıklama:** `bun run dev` ile test edilmeli
 
-### 3. Timeout/AFK Handling
-**Durum:** Orta
-**Açıklama:** Oyuncu AFK kalırsa otomatik stand/fold yok
-**Çözüm:** Timer ekle, süre dolunca otomatik aksiyon
-
-### 4. Loading States
-**Durum:** Düşük
-**Açıklama:** API çağrıları sırasında loading göstergeleri eksik
-**Çözüm:** İsProcessing state'lerini genişlet
-
-### 5. Error Handling
-**Durum:** Düşük
-**Açıklama:** Generic error mesajları
-**Çözüm:** Kullanıcı dostu Türkçe hata mesajları ekle
+### 3. Netlify Deploy
+**Durum:** Bekliyor
+**Açıklama:** Environment variables ayarlanmalı ve deploy edilmeli
 
 ---
 
 ## 🔴 EKSİK ÖZELLİKLER (Gelecek)
 
-- [ ] WebSocket/SSE ile gerçek zamanlı güncelleme
+- [ ] WebSocket/SSE ile gerçek zamanlı güncelleme (şu an polling)
 - [ ] Turnuva sistemi (Tournament.tsx mevcut ama mock data)
 - [ ] Split (çift aynı kartta bölme) özelliği
-- [ ] Insurance (sigorta) özelliği
 - [ ] Sesler ve ses efektleri
-- [ ] Oyuncu profil sayfası
-- [ ] Arkadaş sistemi
-- [ ] Özel oda davetleri
 - [ ] Admin paneli
-- [ ] İstatistik grafikleri
+- [ ] AFK/Timeout handling
 
 ---
 
 ## 📝 NOTLAR
+
+### Son Yapılan Değişiklikler (Bu Oturum)
+1. `@neondatabase/serverless` paketi package.json'a eklendi
+2. GameTable.tsx tamamen yeniden yazıldı:
+   - Server mode: Gerçek API çağrıları ile multiplayer
+   - Local mode: Offline demo oyun
+   - 2 saniyede bir polling ile state senkronizasyonu
+   - Tüm oyun aksiyonları (bet, hit, stand, double) API'ye bağlandı
+   - Dealer otomatik oynama
+   - Chip güncellemeleri server'dan alınıyor
 
 ### Blackjack Kuralları (Mevcut Uygulama)
 - Blackjack (ilk 2 kart 21): 2.5x kazanç (bahis geri + 1.5x)
@@ -83,6 +83,13 @@
 - Double down: 2 kartla, bahis iki katına çıkar, 1 kart alır
 - Push (berabere): Bahis geri döner
 
+### Environment Variables (Netlify için gerekli)
+```
+DATABASE_URL=postgresql://...@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
+TELEGRAM_BOT_TOKEN=your_bot_token
+WEBAPP_URL=https://your-app.netlify.app
+```
+
 ### Dosya Yapısı
 ```
 src/
@@ -90,7 +97,7 @@ src/
 │   ├── api/
 │   │   ├── auth/route.ts      - Kullanıcı authentication
 │   │   ├── bonus/route.ts     - Günlük bonus
-│   │   ├── game/route.ts      - Oyun aksiyonları
+│   │   ├── game/route.ts      - Oyun aksiyonları (start, bet, deal, hit, stand, double, dealer_play)
 │   │   ├── leaderboard/route.ts
 │   │   ├── rooms/route.ts     - Oda yönetimi
 │   │   └── telegram/route.ts  - Bot webhook
@@ -99,7 +106,7 @@ src/
 │   └── page.tsx               - Ana sayfa
 ├── components/
 │   ├── Chip.tsx
-│   ├── GameTable.tsx          - Oyun masası
+│   ├── GameTable.tsx          - Oyun masası (SERVER + LOCAL mode)
 │   ├── Header.tsx
 │   ├── Leaderboard.tsx
 │   ├── Lobby.tsx
@@ -107,26 +114,21 @@ src/
 │   ├── PlayingCard.tsx
 │   └── Tournament.tsx
 └── lib/
-    ├── db.ts                  - Veritabanı işlemleri
+    ├── db.ts                  - Neon PostgreSQL bağlantısı
     ├── gameTypes.ts           - Tip tanımları
     ├── store.ts               - Zustand stores
     ├── telegram.ts            - Telegram WebApp
     └── useGameStore.ts        - Oyun hook'u
 ```
 
-### Environment Variables
-- `DATABASE_URL` - Neon PostgreSQL bağlantı URL'i
-- `TELEGRAM_BOT_TOKEN` - Bot token
-- `WEBAPP_URL` - Deploy edilmiş URL
-- `TELEGRAM_BOT_USERNAME` - Bot kullanıcı adı
-- `ALLOWED_GROUP_IDS` - İzin verilen grup ID'leri (opsiyonel)
-- `TELEGRAM_DEBUG` - Debug modu (opsiyonel)
-
 ---
 
 ## 🎯 SONRAKİ ADIMLAR
 
-1. [ ] Dev server başlat ve test et
-2. [ ] Görsel iyileştirmeler
-3. [ ] Multiplayer sync implementasyonu
-4. [ ] Deploy ve test
+1. [ ] `bun install` ile bağımlılıkları yükle
+2. [ ] `bun run dev` ile dev server başlat
+3. [ ] Lint hatalarını kontrol et ve düzelt
+4. [ ] Test et (local mode çalışıyor mu?)
+5. [ ] Neon.tech DATABASE_URL ayarla
+6. [ ] Netlify'a deploy et
+7. [ ] Telegram bot ile test et
