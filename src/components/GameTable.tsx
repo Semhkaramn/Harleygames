@@ -119,6 +119,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   const handleConfirmBet = () => {
     if (!currentPlayer || selectedBet === 0) return;
 
+    // Yeterli bakiye kontrolü
+    if (currentPlayer.chips < selectedBet) {
+      showNotification('error', 'Yetersiz bakiye');
+      return;
+    }
+
     setLocalPlayers(prev => prev.map(p =>
       p.id === myPlayerId
         ? { ...p, bet: selectedBet, chips: p.chips - selectedBet, status: 'playing' }
@@ -221,6 +227,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   // Double down
   const handleDoubleDown = () => {
     if (!currentPlayer) return;
+
+    // Yeterli bakiye kontrolü (double down için ek bahis gerekiyor)
+    if (currentPlayer.chips < currentPlayer.bet) {
+      showNotification('error', 'Katlamak için yeterli bakiye yok');
+      return;
+    }
 
     const deck = [...localDeck];
     const newCard = deck.pop()!;
@@ -513,7 +525,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
                   'text-gray-400'
                 }`}>
                   {player.status === 'win' ? `+${player.bet}` :
-                   player.status === 'blackjack' ? `+${Math.floor(player.bet * 1.5)}` :
+                   player.status === 'blackjack' ? `+${Math.floor(player.bet * 2.5)}` :
                    player.status === 'lose' || player.status === 'bust' ? `-${player.bet}` :
                    'Berabere'}
                 </span>
