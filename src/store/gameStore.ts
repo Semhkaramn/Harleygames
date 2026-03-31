@@ -82,32 +82,19 @@ const createBot = (seatIndex: number): Player => {
   };
 };
 
-// Başlangıç masaları
+// Başlangıç masaları - BOŞ OLACAK (bot yok)
 const createInitialTables = (): Table[] => {
   const tables: Table[] = [];
 
   for (let i = 1; i <= 6; i++) {
-    const playerCount = Math.floor(Math.random() * 4); // 0-3 bot
-    const players: Player[] = [];
-
-    const usedSeats: number[] = [];
-    for (let j = 0; j < playerCount; j++) {
-      let seat: number;
-      do {
-        seat = Math.floor(Math.random() * 5);
-      } while (usedSeats.includes(seat));
-      usedSeats.push(seat);
-      players.push(createBot(seat));
-    }
-
     tables.push({
       id: `table-${i}`,
       name: `Masa ${i}`,
       minBet: i <= 2 ? 10 : i <= 4 ? 50 : 100,
       maxBet: i <= 2 ? 500 : i <= 4 ? 2000 : 5000,
       maxPlayers: 5,
-      players,
-      status: playerCount > 0 ? 'waiting' : 'waiting',
+      players: [], // Boş başla - bot yok
+      status: 'waiting',
       dealerCards: [],
       dealerScore: 0,
       currentPlayerIndex: -1,
