@@ -173,7 +173,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
   // Deal cards
   const dealCards = () => {
-    let deck = ensureDeckHasCards([...localDeck]);
+    const deck = ensureDeckHasCards([...localDeck]);
     const players = localPlayers.filter(p => p.bet > 0);
 
     if (players.length === 0) return;
@@ -213,7 +213,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     if (!currentPlayer || localStatus !== 'playing' || isProcessing) return;
 
     setIsProcessing(true);
-    let deck = ensureDeckHasCards([...localDeck]);
+    const deck = ensureDeckHasCards([...localDeck]);
     const newCard = deck.pop()!;
 
     const updatedPlayers = localPlayers.map(player => {
@@ -275,7 +275,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
     setIsProcessing(true);
 
-    let deck = ensureDeckHasCards([...localDeck]);
+    const deck = ensureDeckHasCards([...localDeck]);
     const newCard = deck.pop()!;
 
     const updatedPlayers = localPlayers.map(player => {
@@ -323,7 +323,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
   // Dealer plays
   const dealerPlay = () => {
-    let deck = ensureDeckHasCards([...localDeck]);
+    const deck = ensureDeckHasCards([...localDeck]);
     let dealerCards = localDealer.cards.map(c => ({ ...c, faceUp: true }));
     let dealerScore = calculateHandValue(dealerCards);
 
