@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
+        const deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
 
         // Bahis koyan oyuncuları al
         const players = await sql`
@@ -318,7 +318,7 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
+        const deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
 
         // Oyuncuyu bul
         const players = await sql`
@@ -428,7 +428,7 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
+        const deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
 
         // Oyuncuyu bul
         const players = await sql`
@@ -513,8 +513,8 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
-        let deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
-        let dealerCards: Card[] = (game.dealer_cards as Card[]).map(c => ({ ...c, faceUp: true }));
+        const deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
+        const dealerCards: Card[] = (game.dealer_cards as Card[]).map(c => ({ ...c, faceUp: true }));
         let dealerScore = calculateHandValue(dealerCards);
 
         // Dealer 17'ye kadar çeker
