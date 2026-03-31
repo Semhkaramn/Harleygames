@@ -10,7 +10,7 @@ import { BettingPanel } from './BettingPanel';
 import { GameActions } from './GameActions';
 import { ResultsPanel } from './ResultsPanel';
 import { cn } from '@/lib/utils';
-import { ArrowLeft, Coins, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Coins, Wifi, WifiOff, ArrowRightLeft } from 'lucide-react';
 
 export function TableView() {
   const {
@@ -25,11 +25,14 @@ export function TableView() {
     hit,
     stand,
     doubleDown,
+    changeSeat,
     decrementCountdown,
     decrementTurnTimer,
   } = useGameStore();
 
   const [isLeaving, setIsLeaving] = useState(false);
+  const [showSeatPicker, setShowSeatPicker] = useState(false);
+  const [isChangingSeat, setIsChangingSeat] = useState(false);
 
   // Countdown timer
   useEffect(() => {
@@ -93,12 +96,28 @@ export function TableView() {
     await doubleDown();
   }, [doubleDown]);
 
+  const handleChangeSeat = useCallback(async (newSeat: number) => {
+    setIsChangingSeat(true);
+    const success = await changeSeat(newSeat);
+    setIsChangingSeat(false);
+    if (success) {
+      setShowSeatPicker(false);
+    }
+  }, [changeSeat]);
+
   if (!activeGame || !currentUser) return null;
 
   const myPlayer = activeGame.players.find(p => p.isCurrentUser);
   const currentPlayerIndex = activeGame.currentPlayerIndex;
   const currentPlayer = currentPlayerIndex >= 0 ? activeGame.players[currentPlayerIndex] : null;
   const isMyTurn = currentPlayer?.isCurrentUser && activeGame.status === 'playing';
+
+  // Koltuk değiştirme sadece waiting durumunda aktif
+  const canChangeSeat = activeGame.status === 'waiting';
+
+  // Dolu ve boş koltuklar
+  const occupiedSeats = activeGame.players.map(p => p.seatNumber);
+  const availableSeats = [1, 2, 3, 4, 5, 6].filter(s => !occupiedSeats.includes(s));
 
   // 6 koltuk pozisyonları - yarım daire
   const seatPositions = [
@@ -165,6 +184,77 @@ export function TableView() {
           </Avatar>
         </div>
       </div>
+
+      {/* Seat Change Button - Only visible in waiting status */}
+      {canChangeSeat && myPlayer && availableSeats.length > 0 && (
+        <div className="absolute top-14 left-1/2 transform -translate-x-1/2 z-40">
+          <Button
+            onClick={() => setShowSeatPicker(!showSeatPicker)}
+            variant="outline"
+            size="sm"
+            className="bg-gray-800/90 border-gray-600 text-white hover:bg-gray-700"
+          >
+            <ArrowRightLeft className="w-4 h-4 mr-2" />
+            Koltuk Değiştir ({myPlayer.seatNumber}. koltuk)
+          </Button>
+        </div>
+      )}
+
+      {/* Seat Picker Modal */}
+      {showSeatPicker && canChangeSeat && (
+        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-50 bg-gray-800 rounded-xl p-4 shadow-xl border border-gray-700">
+          <h3 className="text-white font-bold text-center mb-3">Koltuk Seç</h3>
+          <div className="grid grid-cols-6 gap-2">
+            {[1, 2, 3, 4, 5, 6].map((seat) => {
+              const isOccupied = occupiedSeats.includes(seat);
+              const isCurrentSeat = myPlayer?.seatNumber === seat;
+              const player = activeGame.players.find(p => p.seatNumber === seat);
+
+              return (
+                <button
+                  key={seat}
+                  type="button"
+                  onClick={() => !isOccupied && !isCurrentSeat && handleChangeSeat(seat)}
+                  disabled={isOccupied || isCurrentSeat || isChangingSeat}
+                  className={cn(
+                    'w-12 h-12 rounded-lg flex flex-col items-center justify-center transition-all',
+                    isCurrentSeat
+                      ? 'bg-green-600 ring-2 ring-green-400'
+                      : isOccupied
+                        ? 'bg-gray-700 cursor-not-allowed'
+                        : 'bg-gray-600 hover:bg-green-500 cursor-pointer'
+                  )}
+                >
+                  {isOccupied && player ? (
+                    <Avatar className="w-8 h-8">
+                      <AvatarImage src={player.avatar} />
+                      <AvatarFallback className="text-xs bg-gray-500">
+                        {player.name.substring(0, 1)}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <span className={cn(
+                      'text-sm font-bold',
+                      isCurrentSeat ? 'text-white' : 'text-gray-300'
+                    )}>
+                      {seat}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 text-center">
+            <button
+              type="button"
+              onClick={() => setShowSeatPicker(false)}
+              className="text-gray-400 text-sm hover:text-white"
+            >
+              İptal
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Game Status - Ortada */}
       {activeGame.status === 'waiting' && myPlayer?.status === 'waiting' && (
