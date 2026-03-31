@@ -5,10 +5,11 @@ interface HeaderProps {
   userChips?: number;
   userName?: string;
   userAvatar?: string;
+  userPhotoUrl?: string | null;
   onBack?: () => void;
 }
 
-export function Header({ currentView, userChips = 0, userName, userAvatar = '🎭', onBack }: HeaderProps) {
+export function Header({ currentView, userChips = 0, userName, userAvatar = '🎭', userPhotoUrl, onBack }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 bg-black/90 backdrop-blur-xl border-b border-amber-500/10">
       <div className="px-3 py-2">
@@ -48,10 +49,23 @@ export function Header({ currentView, userChips = 0, userName, userAvatar = '�
               <span className="text-amber-300 font-bold text-xs">{userChips.toLocaleString()}</span>
             </div>
 
-            {/* User avatar */}
+            {/* User avatar - with TG photo support */}
             {userName && (
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500/30 to-amber-700/30 flex items-center justify-center text-sm border border-amber-500/20">
-                {userAvatar}
+              <div className="flex items-center gap-1.5">
+                {userPhotoUrl ? (
+                  <img
+                    src={userPhotoUrl}
+                    alt={userName}
+                    className="w-7 h-7 rounded-full border border-amber-500/20 object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500/30 to-amber-700/30 flex items-center justify-center text-sm border border-amber-500/20">
+                    {userAvatar}
+                  </div>
+                )}
+                <span className="text-[10px] text-gray-400 max-w-[60px] truncate hidden sm:block">
+                  {userName}
+                </span>
               </div>
             )}
           </div>
