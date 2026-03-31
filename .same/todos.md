@@ -2,20 +2,51 @@
 
 ---
 
-## 🔄 ŞU AN YAPILIYOR
+## 🔧 AKTİF DÜZELTMELER
 
-- [x] Proje inceleniyor ve eksikler belirleniyor
-- [x] Development server başlatıldı
-- [x] framer-motion paketi kuruldu
-- [x] TypeScript hataları düzeltildi
-- [ ] UI/UX geliştirmeleri başlanıyor
-- [ ] Kart animasyonları ekleniyor
+### Kritik Hatalar (Düzeltilecek)
+- [x] DB bağlantısı - DATABASE_URL boş olduğunda hata fırlat
+- [x] Dealer blackjack kontrolü - Dealer ve oyuncu aynı anda blackjack olursa push olmalı
+- [x] Oda oluşturma - Oda sahibi otomatik olarak room_players'a eklenmeli
+- [x] Auth route - Development modda bile Telegram kontrolü düzgün çalışmalı
+- [x] Game state - Dealer kartları results durumunda hep açık gösterilmeli
+- [x] Double down - Blackjack ile double down yapılamaz kontrolü eklenmeli
+- [x] Bet validation - Bahis yapıldığında oyuncu durumu doğru güncellenmeli
+
+### Mantıksal İyileştirmeler
+- [x] SSE - Game action'lardan sonra broadcastToRoom çağrılmalı
+- [x] Tournament tabloları - Her zaman init edilmeli
+- [x] Cleanup - Eski oyunları temizleme (results durumunda 10 dk sonra)
 
 ---
 
-## 🚀 AKTİF GELİŞTİRME - V2.0
+## 🚫 KALDIRILDI
 
-### 1️⃣ UI/UX Geliştirmeleri (ÖNCELİKLİ)
+- [x] Local/Demo mod - Zaten kaldırılmış (page.tsx'de Telegram dışında authError gösteriliyor)
+- [x] Mock user - Yok (sadece gerçek Telegram kullanıcısı kabul ediliyor)
+
+---
+
+## ✅ TAMAMLANAN ÖZELLİKLER
+
+- [x] Proje yapısı ve temel kurulum
+- [x] Telegram WebApp entegrasyonu
+- [x] Kullanıcı authentication (gerçek DB bağlantısı)
+- [x] Veritabanı şeması (Neon.tech PostgreSQL)
+- [x] Günlük bonus sistemi
+- [x] Liderlik tablosu
+- [x] Oda oluşturma/katılma
+- [x] Temel oyun mekaniği
+- [x] Double down API endpoint
+- [x] UI Bileşenleri (Header, Lobby, GameTable, PlayerSeat, PlayingCard, Chip, Leaderboard, Tournament)
+- [x] Zustand store yapısı
+- [x] SSE endpoint yapısı
+
+---
+
+## 🎯 SONRAKI ADIMLAR (UI/UX - Son sırada)
+
+### UI/UX Geliştirmeleri
 - [ ] Kart çevirme animasyonları (flip effect)
 - [ ] Kart dağıtım animasyonları (deal, slide)
 - [ ] Chip animasyonları (stack, toss)
@@ -27,62 +58,18 @@
 - [ ] Toast bildirimleri geliştir
 - [ ] Responsive tasarım iyileştirmeleri
 
-### 2️⃣ WebSocket/SSE ile Gerçek Zamanlı Güncelleme
-- [ ] Server-Sent Events (SSE) endpoint oluştur (`/api/sse`)
-- [ ] EventSource client hook oluştur (`useGameEvents.ts`)
-- [ ] GameTable bileşenini SSE ile entegre et
-- [ ] Lobby'de oda güncellemelerini gerçek zamanlı yap
-- [ ] Oyuncu katılma/ayrılma bildirimleri
-- [ ] Polling'i kaldır, sadece SSE kullan
-
-### 3️⃣ Turnuva Sistemi
-- [ ] Turnuva API endpoints tamamla
-- [ ] Tournament.tsx bileşenini gerçek verilerle doldur
-- [ ] Turnuva lobby'si (kayıt, bekleme odası)
-- [ ] Eliminasyon sistemi
-
----
-
-## ✅ TAMAMLANAN ÖZELLİKLER
-
-- [x] Proje yapısı ve temel kurulum
-- [x] Telegram WebApp entegrasyonu
-- [x] Kullanıcı authentication
-- [x] Veritabanı şeması
-- [x] Günlük bonus sistemi
-- [x] Liderlik tablosu
-- [x] Oda oluşturma/katılma
-- [x] Temel oyun mekaniği
-- [x] Double down API endpoint
-- [x] UI Bileşenleri (Header, Lobby, GameTable, PlayerSeat, PlayingCard, Chip, Leaderboard, Tournament)
-- [x] Zustand store yapısı
-- [x] framer-motion kuruldu
-- [x] TypeScript hataları düzeltildi
-
 ---
 
 ## 📝 TEKNİK NOTLAR
 
-- Veritabanı olmadan local/demo mode çalışıyor bunu kaldır local demo mod olmayacak veritabano bağlantısı netlify de var bu uyarımı da asla silme 
-- framer-motion v12.38.0 kullanılıyor
+- Veritabanı bağlantısı: Netlify ENV'de DATABASE_URL mevcut (Neon.tech)
+- TELEGRAM_BOT_TOKEN: Netlify ENV'de mevcut
 - Next.js 15.3.7 + Turbopack
+- Zustand 4.5.x state management
+- SSE ile gerçek zamanlı güncelleme altyapısı hazır
 
 ---
 
-## 🎯 ÖNCELİK SIRASI
-
-1. **en son bu**: UI/UX animasyonları ve efektler
-2. **ORTA**: SSE gerçek zamanlı güncelleme
-3. **DÜŞÜK**: Turnuva sistemi tamamlama
-
----
-Kullanıcı local demo mode'u tamamen kaldırmak istiyor ve veritabanı bağlantısının her zaman var olduğunu söylüyor. Bu durumda:
-
-page.tsx'den getMockUser() ve ilgili kodları kaldır
-GameTable'daki local mode kodlarını kaldır
-Telegram dışında çalışma durumunda hata mesajı göster
-Todo'yu güncelle
-Hadi başlayalım.
 ## 🔧 KURULUM
 
 ```bash
@@ -91,16 +78,17 @@ bun install
 bun run dev
 ```
 
-### Environment Variables (Netlify'da)
+### Environment Variables (Netlify'da var)
 ```
 DATABASE_URL=postgresql://...
 TELEGRAM_BOT_TOKEN=...
 WEBAPP_URL=https://harleygames.netlify.app
 ```
 
-### Blackjack Kuralları (Mevcut Uygulama)
+### Blackjack Kuralları
 - Blackjack (ilk 2 kart 21): 2.5x kazanç (bahis geri + 1.5x)
 - Normal kazanç: 2x (bahis geri + 1x)
 - Dealer 17'de durur
-- Double down: 2 kartla, bahis iki katına çıkar, 1 kart alır
+- Double down: 2 kartla, bahis iki katına çıkar, 1 kart alır (blackjack ile yapılamaz)
 - Push (berabere): Bahis geri döner
+- Dealer ve oyuncu aynı anda blackjack: Push (bahis geri)
