@@ -23,7 +23,7 @@ export type PlayerStatus =
 
 export interface Player {
   id: string;
-visibleName: string;
+  name: string;
   avatar: string;
   balance: number;
   seatIndex: number; // 0-4 arası koltuk
