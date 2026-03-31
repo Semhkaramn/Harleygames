@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { type Player, type Card, calculateHandValue, isBlackjack, createDeck } from '@/lib/gameTypes';
-import { useUserStore, useLiveGameStore, useUIStore } from '@/lib/store';
+import { useUserStore, useUIStore } from '@/lib/store';
 import { PlayingCard } from './PlayingCard';
 import { PlayerSeat } from './PlayerSeat';
 import { Chip } from './Chip';
@@ -23,40 +23,153 @@ const SEAT_POSITIONS = [
   { x: '50%', y: '55%' },
 ];
 
-// Minimum kart sayısı - bu altına düşerse deste yenilenir
 const MIN_DECK_CARDS = 15;
 
+interface ServerGameState {
+  id: number;
+  room_id: string;
+  status: string;
+  dealer_cards: Card[];
+  dealer_score: number;
+  deck: Card[];
+  current_player_index: number;
+  players: {
+    id: string;
+    telegramId: number;
+    name: string;
+    avatar: string;
+    seatNumber: number;
+    bet: number;
+    cards: Card[];
+    status: string;
+    isTurn: boolean;
+  }[];
+}
+
 export function GameTable({ roomId, onBack }: GameTableProps) {
-  const { dbUser, updateChips } = useUserStore();
+  const { dbUser, updateChips, setDbUser } = useUserStore();
   const { showNotification } = useUIStore();
 
-  // Local game state (for offline/demo mode)
+  // Server game state
+  const [serverGame, setServerGame] = useState<ServerGameState | null>(null);
+  const [isServerMode, setIsServerMode] = useState(!!roomId);
+
+  // Local game state (for demo mode when no roomId)
   const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
   const [localDealer, setLocalDealer] = useState<{ cards: Card[]; score: number }>({ cards: [], score: 0 });
   const [localDeck, setLocalDeck] = useState<Card[]>([]);
   const [localStatus, setLocalStatus] = useState<'waiting' | 'betting' | 'dealing' | 'playing' | 'dealer-turn' | 'results'>('waiting');
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const [myGamePlayerId, setMyGamePlayerId] = useState<string | null>(null);
 
   const [selectedBet, setSelectedBet] = useState(0);
   const [showBetPanel, setShowBetPanel] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const chipValues = [5, 10, 25, 50, 100, 500];
 
-  // Deck'i kontrol et ve gerekirse yenile
-  const ensureDeckHasCards = useCallback((deck: Card[]): Card[] => {
-    if (deck.length < MIN_DECK_CARDS) {
-      const newDeck = createDeck();
-      return [...newDeck, ...deck];
+  // Refresh user data from server
+  const refreshUserData = useCallback(async () => {
+    if (!dbUser) return;
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          initData: '',
+          user: {
+            id: dbUser.telegram_id,
+            first_name: dbUser.first_name,
+            username: dbUser.username,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.user) {
+        setDbUser(data.user);
+      }
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
     }
-    return deck;
-  }, []);
+  }, [dbUser, setDbUser]);
 
-  // Initialize local game
+  // Fetch game state from server
+  const fetchGameState = useCallback(async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await fetch(`/api/game?room_id=${roomId}`);
+      const data = await response.json();
+
+      if (data.game) {
+        setServerGame(data.game);
+
+        // Find my player in the game
+        if (dbUser) {
+          const myPlayer = data.game.players?.find(
+            (p: { telegramId: number }) => p.telegramId === dbUser.telegram_id
+          );
+          if (myPlayer) {
+            setMyGamePlayerId(myPlayer.id);
+          }
+        }
+
+        // Auto trigger dealer play when it's dealer's turn
+        if (data.game.status === 'dealer-turn') {
+          await triggerDealerPlay();
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch game state:', error);
+    }
+  }, [roomId, dbUser]);
+
+  // Trigger dealer play
+  const triggerDealerPlay = async () => {
+    if (!roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'dealer_play',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchGameState();
+        await refreshUserData();
+        hapticFeedback('success');
+      }
+    } catch (error) {
+      console.error('Dealer play error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Start polling for server mode
   useEffect(() => {
-    if (!roomId && dbUser) {
-      // Demo mode - add current user to the game
+    if (isServerMode && roomId) {
+      fetchGameState();
+      pollingRef.current = setInterval(fetchGameState, 2000);
+
+      return () => {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+        }
+      };
+    }
+  }, [isServerMode, roomId, fetchGameState]);
+
+  // Initialize local game for demo mode
+  useEffect(() => {
+    if (!roomId && dbUser && !isServerMode) {
       const player: Player = {
         id: `player-${dbUser.telegram_id}`,
         name: dbUser.first_name || 'Oyuncu',
@@ -75,39 +188,261 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       setLocalStatus('betting');
       setShowBetPanel(true);
     }
-  }, [roomId, dbUser]);
+  }, [roomId, dbUser, isServerMode]);
 
-  // Sync chips with server after game ends
-  const syncChipsWithServer = useCallback(async (telegramId: number, chipChange: number) => {
+  // Handle joining a seat (server mode)
+  const handleJoinSeat = async (seatNumber: number) => {
+    if (!dbUser || !roomId) return;
+
+    setIsProcessing(true);
     try {
-      // Update local store
-      updateChips(chipChange);
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'join',
+          telegram_id: dbUser.telegram_id,
+          seat_number: seatNumber,
+        }),
+      });
 
-      // In a real implementation, this would call the API to sync
-      // For now, we just update the local state
-      console.log(`Chips synced: ${chipChange > 0 ? '+' : ''}${chipChange}`);
+      const data = await response.json();
+      if (data.success) {
+        await fetchGameState();
+        setShowBetPanel(true);
+        hapticFeedback('medium');
+      } else {
+        showNotification('error', data.error || 'Koltuğa oturulamadı');
+      }
     } catch (error) {
-      console.error('Failed to sync chips:', error);
+      showNotification('error', 'Bağlantı hatası');
+    } finally {
+      setIsProcessing(false);
     }
-  }, [updateChips]);
+  };
 
-  // Get current player
-  const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
+  // Handle placing bet (server mode)
+  const handleServerBet = async () => {
+    if (!myGamePlayerId || !roomId || selectedBet === 0 || isProcessing) return;
 
-  // Handle seat selection
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'bet',
+          player_id: myGamePlayerId,
+          bet: selectedBet,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSelectedBet(0);
+        setShowBetPanel(false);
+        await fetchGameState();
+        await refreshUserData();
+        hapticFeedback('success');
+
+        // Auto deal after bet (single player mode)
+        setTimeout(async () => {
+          await handleDeal();
+        }, 500);
+      } else {
+        showNotification('error', data.error || 'Bahis yapılamadı');
+      }
+    } catch (error) {
+      showNotification('error', 'Bağlantı hatası');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle deal cards (server mode)
+  const handleDeal = async () => {
+    if (!roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'deal',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchGameState();
+        hapticFeedback('medium');
+      }
+    } catch (error) {
+      console.error('Deal error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle hit (server mode)
+  const handleServerHit = async () => {
+    if (!myGamePlayerId || !roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'hit',
+          player_id: myGamePlayerId,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchGameState();
+        hapticFeedback('medium');
+
+        if (data.status === 'bust') {
+          showNotification('error', 'Battınız! 21\'i geçtiniz.');
+        }
+      } else {
+        showNotification('error', data.error || 'Kart alınamadı');
+      }
+    } catch (error) {
+      showNotification('error', 'Bağlantı hatası');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle stand (server mode)
+  const handleServerStand = async () => {
+    if (!myGamePlayerId || !roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'stand',
+          player_id: myGamePlayerId,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchGameState();
+        hapticFeedback('light');
+      } else {
+        showNotification('error', data.error || 'İşlem yapılamadı');
+      }
+    } catch (error) {
+      showNotification('error', 'Bağlantı hatası');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle double down (server mode)
+  const handleServerDouble = async () => {
+    if (!myGamePlayerId || !roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'double_down',
+          player_id: myGamePlayerId,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await fetchGameState();
+        await refreshUserData();
+        hapticFeedback('success');
+
+        if (data.status === 'bust') {
+          showNotification('error', 'Battınız! 21\'i geçtiniz.');
+        }
+      } else {
+        showNotification('error', data.error || 'Katlama yapılamadı');
+      }
+    } catch (error) {
+      showNotification('error', 'Bağlantı hatası');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Start new game (server mode)
+  const handleNewServerGame = async () => {
+    if (!roomId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: roomId,
+          action: 'start',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.game) {
+        await fetchGameState();
+        setShowBetPanel(true);
+        hapticFeedback('medium');
+      }
+    } catch (error) {
+      console.error('Start game error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // =====================
+  // LOCAL MODE FUNCTIONS
+  // =====================
+
+  const ensureDeckHasCards = useCallback((deck: Card[]): Card[] => {
+    if (deck.length < MIN_DECK_CARDS) {
+      const newDeck = createDeck();
+      return [...newDeck, ...deck];
+    }
+    return deck;
+  }, []);
+
   const handleSeatClick = (seatNumber: number) => {
+    if (isServerMode && roomId) {
+      handleJoinSeat(seatNumber);
+      return;
+    }
+
     if (!dbUser) {
       showNotification('error', 'Giriş yapmanız gerekiyor');
       return;
     }
 
-    // Check if seat is available
     if (localPlayers.find(p => p.seatNumber === seatNumber)) {
       showNotification('error', 'Bu koltuk dolu');
       return;
     }
 
-    // Join the seat
     const player: Player = {
       id: `player-${dbUser.telegram_id}`,
       name: dbUser.first_name || 'Oyuncu',
@@ -131,9 +466,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Handle betting
   const handleChipClick = (value: number) => {
-    if (currentPlayer && currentPlayer.chips >= selectedBet + value) {
+    const availableChips = isServerMode
+      ? (dbUser?.chips || 0)
+      : (localPlayers.find(p => p.id === myPlayerId)?.chips || 0);
+
+    if (availableChips >= selectedBet + value) {
       setSelectedBet((prev) => prev + value);
       hapticFeedback('light');
     }
@@ -144,9 +482,14 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
   };
 
   const handleConfirmBet = () => {
+    if (isServerMode) {
+      handleServerBet();
+      return;
+    }
+
+    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
     if (!currentPlayer || selectedBet === 0 || isProcessing) return;
 
-    // Yeterli bakiye kontrolü
     if (currentPlayer.chips < selectedBet) {
       showNotification('error', 'Yetersiz bakiye');
       return;
@@ -164,21 +507,18 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     setShowBetPanel(false);
     hapticFeedback('success');
 
-    // Auto deal after bet
     setTimeout(() => {
-      dealCards();
+      dealLocalCards();
       setIsProcessing(false);
     }, 500);
   };
 
-  // Deal cards
-  const dealCards = () => {
+  const dealLocalCards = () => {
     const deck = ensureDeckHasCards([...localDeck]);
     const players = localPlayers.filter(p => p.bet > 0);
 
     if (players.length === 0) return;
 
-    // Deal 2 cards to each player
     const updatedPlayers = localPlayers.map(player => {
       if (player.bet > 0) {
         const card1 = deck.pop()!;
@@ -188,7 +528,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       return player;
     });
 
-    // Deal 2 cards to dealer (one face down)
     const dealerCard1 = { ...deck.pop()!, faceUp: true };
     const dealerCard2 = { ...deck.pop()!, faceUp: false };
 
@@ -196,9 +535,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     setLocalDealer({ cards: [dealerCard1, dealerCard2], score: calculateHandValue([dealerCard1]) });
     setLocalDeck(deck);
     setLocalStatus('playing');
-    setCurrentPlayerIndex(0);
 
-    // Set first player's turn
     const firstPlayer = updatedPlayers.find(p => p.bet > 0);
     if (firstPlayer) {
       setLocalPlayers(prev => prev.map(p => ({
@@ -208,8 +545,8 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Hit
-  const handleHit = () => {
+  const handleLocalHit = () => {
+    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
     if (!currentPlayer || localStatus !== 'playing' || isProcessing) return;
 
     setIsProcessing(true);
@@ -237,17 +574,16 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     setLocalDeck(deck);
     hapticFeedback('medium');
 
-    // Check if current player is done
     const updatedPlayer = updatedPlayers.find(p => p.id === myPlayerId);
     if (updatedPlayer?.status === 'bust' || updatedPlayer?.status === 'stand') {
-      moveToNextPlayer(updatedPlayers);
+      moveToNextLocalPlayer(updatedPlayers);
     }
 
     setIsProcessing(false);
   };
 
-  // Stand
-  const handleStand = () => {
+  const handleLocalStand = () => {
+    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
     if (!currentPlayer || isProcessing) return;
 
     setIsProcessing(true);
@@ -258,16 +594,15 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
     setLocalPlayers(updatedPlayers);
     hapticFeedback('light');
-    moveToNextPlayer(updatedPlayers);
+    moveToNextLocalPlayer(updatedPlayers);
 
     setIsProcessing(false);
   };
 
-  // Double down
-  const handleDoubleDown = () => {
+  const handleLocalDouble = () => {
+    const currentPlayer = localPlayers.find(p => p.id === myPlayerId);
     if (!currentPlayer || isProcessing) return;
 
-    // Yeterli bakiye kontrolü (double down için ek bahis gerekiyor)
     if (currentPlayer.chips < currentPlayer.bet) {
       showNotification('error', 'Katlamak için yeterli bakiye yok');
       return;
@@ -300,13 +635,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     setLocalPlayers(updatedPlayers);
     setLocalDeck(deck);
     hapticFeedback('success');
-    moveToNextPlayer(updatedPlayers);
+    moveToNextLocalPlayer(updatedPlayers);
 
     setIsProcessing(false);
   };
 
-  // Move to next player or dealer
-  const moveToNextPlayer = (players: Player[]) => {
+  const moveToNextLocalPlayer = (players: Player[]) => {
     const playingPlayers = players.filter(p => p.status === 'playing');
 
     if (playingPlayers.length > 0) {
@@ -315,19 +649,16 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         isTurn: p.id === playingPlayers[0].id
       })));
     } else {
-      // Dealer's turn
       setLocalStatus('dealer-turn');
-      setTimeout(() => dealerPlay(), 1000);
+      setTimeout(() => localDealerPlay(), 1000);
     }
   };
 
-  // Dealer plays
-  const dealerPlay = () => {
+  const localDealerPlay = () => {
     const deck = ensureDeckHasCards([...localDeck]);
     let dealerCards = localDealer.cards.map(c => ({ ...c, faceUp: true }));
     let dealerScore = calculateHandValue(dealerCards);
 
-    // Dealer hits on 16 or less
     while (dealerScore < 17) {
       const newCard = { ...deck.pop()!, faceUp: true };
       dealerCards = [...dealerCards, newCard];
@@ -336,7 +667,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
     const dealerHasBlackjackLocal = isBlackjack(dealerCards);
 
-    // Calculate results
     const updatedPlayers = localPlayers.map(player => {
       if (player.status === 'bust') {
         return { ...player, status: 'lose' as const };
@@ -346,7 +676,6 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       const playerHasBlackjack = isBlackjack(player.cards);
 
       if (playerHasBlackjack && !dealerHasBlackjackLocal) {
-        // Blackjack: bahis geri + bahsin 1.5 katı = toplam 2.5x
         return {
           ...player,
           status: 'blackjack' as const,
@@ -387,24 +716,22 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     setLocalStatus('results');
     hapticFeedback('success');
 
-    // Sync chips with server for the current player
+    // Sync chips with server
     if (dbUser) {
       const myPlayer = updatedPlayers.find(p => p.id === myPlayerId);
       const originalPlayer = localPlayers.find(p => p.id === myPlayerId);
       if (myPlayer && originalPlayer) {
         const chipChange = myPlayer.chips - originalPlayer.chips;
-        syncChipsWithServer(dbUser.telegram_id, chipChange);
+        updateChips(chipChange);
       }
     }
   };
 
-  // Calculate result display for a player
-  const getResultDisplay = (player: Player): { text: string; color: string } => {
+  const getResultDisplay = (player: Player | { status: string; bet: number }): { text: string; color: string } => {
     switch (player.status) {
       case 'win':
         return { text: `+${player.bet}`, color: 'text-green-400' };
       case 'blackjack':
-        // Blackjack ek kazanç: bahsin 1.5 katı (toplam 2.5x - 1 (orijinal bahis) = 1.5x ek)
         return { text: `+${Math.floor(player.bet * 1.5)}`, color: 'text-amber-400' };
       case 'lose':
       case 'bust':
@@ -416,8 +743,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     }
   };
 
-  // Reset game
   const handleNewGame = () => {
+    if (isServerMode) {
+      handleNewServerGame();
+      return;
+    }
+
     setLocalPlayers(prev => prev.map(p => ({
       ...p,
       cards: [],
@@ -432,25 +763,61 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
     hapticFeedback('medium');
   };
 
-  // Check game conditions
-  const isPlayerTurn = currentPlayer?.isTurn && localStatus === 'playing';
+  // Determine current state based on mode
+  const gameStatus = isServerMode ? (serverGame?.status || 'waiting') : localStatus;
+  const gamePlayers = isServerMode
+    ? (serverGame?.players?.map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        chips: dbUser?.telegram_id === p.telegramId ? (dbUser?.chips || 0) : 0,
+        bet: p.bet,
+        cards: p.cards || [],
+        isActive: true,
+        isTurn: p.isTurn,
+        status: p.status as Player['status'],
+        seatNumber: p.seatNumber,
+      })) || [])
+    : localPlayers;
+
+  const gameDealer = isServerMode
+    ? { cards: serverGame?.dealer_cards || [], score: serverGame?.dealer_score || 0 }
+    : localDealer;
+
+  const currentPlayer = isServerMode
+    ? gamePlayers.find(p => p.id === myGamePlayerId)
+    : gamePlayers.find(p => p.id === myPlayerId);
+
+  const isPlayerTurn = currentPlayer?.isTurn && gameStatus === 'playing';
   const canHit = isPlayerTurn && currentPlayer?.status === 'playing' && !isProcessing;
   const canStand = canHit;
-  const canDouble = canHit && currentPlayer?.cards.length === 2 && (currentPlayer?.chips || 0) >= (currentPlayer?.bet || 0);
+  const canDouble = canHit && (currentPlayer?.cards?.length || 0) === 2 && (dbUser?.chips || 0) >= (currentPlayer?.bet || 0);
 
-  const dealerScore = calculateHandValue(localDealer.cards);
-  const dealerHasBlackjack = isBlackjack(localDealer.cards);
+  const dealerScore = calculateHandValue(gameDealer.cards);
+  const dealerHasBlackjack = isBlackjack(gameDealer.cards);
+
+  // Event handlers based on mode
+  const handleHit = isServerMode ? handleServerHit : handleLocalHit;
+  const handleStand = isServerMode ? handleServerStand : handleLocalStand;
+  const handleDouble = isServerMode ? handleServerDouble : handleLocalDouble;
 
   return (
     <div className="relative w-full h-[550px] md:h-[650px] lg:h-[700px] overflow-hidden">
+      {/* Back Button */}
+      <button
+        type="button"
+        onClick={onBack}
+        className="absolute top-3 left-3 z-20 glass rounded-lg px-3 py-1.5 text-xs text-gray-300 hover:text-white transition-colors flex items-center gap-1"
+      >
+        <span>←</span> Geri
+      </button>
+
       {/* Table Background */}
       <div className="absolute inset-0 felt-pattern rounded-[40%] border-[6px] border-amber-800/80 shadow-2xl" style={{
         boxShadow: 'inset 0 0 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 0, 0, 0.5)',
       }}>
-        {/* Table edge highlight */}
         <div className="absolute inset-3 rounded-[40%] border border-amber-900/40" />
 
-        {/* Center logo */}
         <div className="absolute top-[28%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center opacity-15">
           <h2 className="text-3xl md:text-5xl font-bold text-amber-500" style={{ fontFamily: "'Playfair Display', serif" }}>
             HARLEY
@@ -461,15 +828,13 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       {/* Dealer Area */}
       <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center">
-        {/* Dealer label */}
         <div className="mb-3 px-4 py-1 bg-black/60 rounded-full border border-amber-500/30">
           <span className="text-amber-400 font-semibold text-xs tracking-wider">KRUPIYE</span>
         </div>
 
-        {/* Dealer cards */}
         <div className="flex -space-x-3 mb-2">
-          {localDealer.cards.length > 0 ? (
-            localDealer.cards.map((card, index) => (
+          {gameDealer.cards.length > 0 ? (
+            gameDealer.cards.map((card, index) => (
               <PlayingCard key={`dealer-${index}`} card={card} index={index} size="sm" />
             ))
           ) : (
@@ -477,13 +842,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
           )}
         </div>
 
-        {/* Dealer score */}
-        {localDealer.cards.length > 0 && (
+        {gameDealer.cards.length > 0 && (
           <div className={`px-3 py-1 rounded-full text-xs font-bold ${dealerScore > 21 ? 'bg-red-500' : 'bg-black/80'} text-white border border-white/10`}>
-            {localStatus === 'results' || localStatus === 'dealer-turn' ? (
+            {gameStatus === 'results' || gameStatus === 'dealer-turn' ? (
               dealerHasBlackjack ? 'BJ!' : dealerScore
             ) : (
-              calculateHandValue([localDealer.cards[0]])
+              calculateHandValue([gameDealer.cards[0]])
             )}
           </div>
         )}
@@ -491,13 +855,17 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
 
       {/* Player Seats */}
       {SEAT_POSITIONS.map((position, index) => {
-        const player = localPlayers.find((p) => p.seatNumber === index + 1);
+        const player = gamePlayers.find((p) => p.seatNumber === index + 1);
+        const isMyPlayer = isServerMode
+          ? player?.id === myGamePlayerId
+          : player?.id === myPlayerId;
+
         return (
           <PlayerSeat
             key={`seat-${index + 1}`}
             player={player}
             seatNumber={index + 1}
-            isCurrentUser={player?.id === myPlayerId}
+            isCurrentUser={isMyPlayer}
             onSeatClick={() => handleSeatClick(index + 1)}
             position={position}
           />
@@ -505,11 +873,10 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       })}
 
       {/* Betting Panel */}
-      {showBetPanel && localStatus === 'betting' && currentPlayer && currentPlayer.bet === 0 && (
+      {showBetPanel && (gameStatus === 'betting' || gameStatus === 'waiting') && (!currentPlayer || currentPlayer.bet === 0) && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-2xl p-4 animate-slide-up max-w-sm w-[95%]">
           <h3 className="text-center text-amber-400 font-semibold mb-3 text-sm">Bahis Yap</h3>
 
-          {/* Chip selection */}
           <div className="flex gap-1.5 md:gap-2 justify-center mb-3 flex-wrap">
             {chipValues.map((value) => (
               <Chip
@@ -517,18 +884,16 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
                 value={value}
                 onClick={() => handleChipClick(value)}
                 size="sm"
-                disabled={(currentPlayer?.chips || 0) < selectedBet + value}
+                disabled={(dbUser?.chips || 0) < selectedBet + value}
               />
             ))}
           </div>
 
-          {/* Current bet */}
           <div className="text-center mb-3">
             <span className="text-gray-400 text-xs">Bahis:</span>
             <span className="text-amber-400 font-bold text-xl ml-2">{selectedBet}</span>
           </div>
 
-          {/* Action buttons */}
           <div className="flex gap-2 justify-center">
             <button
               type="button"
@@ -549,13 +914,13 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
           </div>
 
           <p className="text-center text-gray-500 text-[10px] mt-2">
-            Bakiye: <span className="text-amber-400">{currentPlayer?.chips}</span>
+            Bakiye: <span className="text-amber-400">{dbUser?.chips?.toLocaleString() || 0}</span>
           </p>
         </div>
       )}
 
       {/* Action Buttons (Hit, Stand, Double) */}
-      {localStatus === 'playing' && isPlayerTurn && (
+      {gameStatus === 'playing' && isPlayerTurn && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 animate-slide-up">
           <button
             type="button"
@@ -563,7 +928,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             disabled={!canHit}
             className="btn-primary px-5 py-2.5 text-sm disabled:opacity-50"
           >
-            Kart Al
+            {isProcessing ? '...' : 'Kart Al'}
           </button>
           <button
             type="button"
@@ -576,7 +941,7 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
           {canDouble && (
             <button
               type="button"
-              onClick={handleDoubleDown}
+              onClick={handleDouble}
               className="btn-gold px-5 py-2.5 text-sm"
             >
               Katla
@@ -585,12 +950,12 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         </div>
       )}
 
-      {/* Game Status Message */}
-      {localStatus === 'results' && (
+      {/* Game Results */}
+      {gameStatus === 'results' && (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 text-center animate-slide-up">
           <div className="glass rounded-xl px-5 py-3">
             <h3 className="text-lg font-bold text-amber-400 mb-2">Sonuçlar</h3>
-            {localPlayers.map((player) => {
+            {gamePlayers.map((player) => {
               const result = getResultDisplay(player);
               return (
                 <div key={player.id} className="flex items-center justify-between gap-4 text-sm">
@@ -605,9 +970,10 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
             <button
               type="button"
               onClick={handleNewGame}
-              className="btn-gold text-xs px-4 py-2 mt-3"
+              disabled={isProcessing}
+              className="btn-gold text-xs px-4 py-2 mt-3 disabled:opacity-50"
             >
-              Yeni Oyun
+              {isProcessing ? 'Başlatılıyor...' : 'Yeni Oyun'}
             </button>
           </div>
         </div>
@@ -617,24 +983,25 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
       <div className="absolute top-3 right-3 glass rounded-lg px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
           <div className={`w-1.5 h-1.5 rounded-full ${
-            localStatus === 'waiting' ? 'bg-gray-400' :
-            localStatus === 'betting' ? 'bg-amber-400 animate-pulse' :
-            localStatus === 'playing' ? 'bg-green-400 animate-pulse' :
-            localStatus === 'dealer-turn' ? 'bg-blue-400 animate-pulse' :
+            gameStatus === 'waiting' ? 'bg-gray-400' :
+            gameStatus === 'betting' ? 'bg-amber-400 animate-pulse' :
+            gameStatus === 'playing' ? 'bg-green-400 animate-pulse' :
+            gameStatus === 'dealer-turn' ? 'bg-blue-400 animate-pulse' :
             'bg-purple-400'
           }`} />
           <span className="text-[10px] text-gray-300">
-            {localStatus === 'waiting' ? 'Bekleniyor' :
-             localStatus === 'betting' ? 'Bahis' :
-             localStatus === 'playing' ? 'Oyun' :
-             localStatus === 'dealer-turn' ? 'Krupiye' :
+            {gameStatus === 'waiting' ? 'Bekleniyor' :
+             gameStatus === 'betting' ? 'Bahis' :
+             gameStatus === 'playing' ? 'Oyun' :
+             gameStatus === 'dealer-turn' ? 'Krupiye' :
              'Sonuçlar'}
           </span>
+          {isServerMode && <span className="text-[8px] text-green-400 ml-1">● CANLI</span>}
         </div>
       </div>
 
-      {/* Player Score Display (when playing) */}
-      {currentPlayer && currentPlayer.cards.length > 0 && localStatus === 'playing' && (
+      {/* Player Score Display */}
+      {currentPlayer && currentPlayer.cards && currentPlayer.cards.length > 0 && gameStatus === 'playing' && (
         <div className="absolute bottom-32 left-1/2 -translate-x-1/2">
           <div className="bg-black/80 px-4 py-2 rounded-full border border-amber-500/30">
             <span className="text-amber-400 font-bold">
@@ -644,13 +1011,15 @@ export function GameTable({ roomId, onBack }: GameTableProps) {
         </div>
       )}
 
-      {/* Deck indicator */}
-      <div className="absolute top-3 left-3 glass rounded-lg px-2.5 py-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-gray-400">🃏</span>
-          <span className="text-[10px] text-gray-300">{localDeck.length}</span>
+      {/* Room ID display for multiplayer */}
+      {roomId && (
+        <div className="absolute bottom-3 left-3 glass rounded-lg px-2.5 py-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-gray-400">Oda:</span>
+            <span className="text-[10px] text-amber-400 font-mono">{roomId}</span>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
