@@ -83,8 +83,8 @@ export function TableView() {
   }, [leaveTable]);
 
   const handleLeave = useCallback(() => {
-    // Aktif oyundaysa uyar
-    if (activeTable && ['dealing', 'playing', 'dealer_turn'].includes(activeTable.status)) {
+    // Aktif oyundaysa uyar - Status tutarsızlığı düzeltildi
+    if (activeTable && ['dealing', 'playing', 'dealer_turn', 'dealer-turn'].includes(activeTable.status)) {
       if (window.confirm('Oyun devam ediyor! Çıkarsanız bu el için otomatik stand yapılacak. Devam etmek istiyor musunuz?')) {
         leaveTable();
       }
