@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useGameStore, calculateHandValue } from '@/store/gameStore';
 import { LobbyView } from '@/components/game/LobbyView';
 import { TableView } from '@/components/game/TableView';
-import { getTelegramUser, getTelegramWebApp, initTelegramWebApp } from '@/lib/telegram';
+import { getTelegramUser, getTelegramWebApp, initTelegramWebApp, isInTelegram } from '@/lib/telegram';
 import type { Player, Card, RoomStatus } from '@/types/game';
 
 export default function Home() {
@@ -38,73 +38,45 @@ export default function Home() {
       const webApp = initTelegramWebApp();
       const telegramUser = getTelegramUser();
 
-      if (telegramUser && webApp) {
-        // Gerçek Telegram kullanıcısı
-        try {
-          const response = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              telegram_id: telegramUser.id,
-              username: telegramUser.username,
-              first_name: telegramUser.first_name,
-              last_name: telegramUser.last_name,
-              photo_url: telegramUser.photo_url,
-              init_data: webApp.initData,
-            }),
+      // Telegram dışında çalışıyorsa hata göster
+      if (!telegramUser || !webApp || !isInTelegram()) {
+        setAuthError('Bu uygulama sadece Telegram üzerinden çalışır. Lütfen Telegram Mini App olarak açın.');
+        setLoading(false);
+        return;
+      }
+
+      // Gerçek Telegram kullanıcısı ile giriş yap
+      try {
+        const response = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            telegram_id: telegramUser.id,
+            username: telegramUser.username,
+            first_name: telegramUser.first_name,
+            last_name: telegramUser.last_name,
+            photo_url: telegramUser.photo_url,
+            init_data: webApp.initData,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentUser({
+            id: data.user.id,
+            telegramId: data.user.telegram_id,
+            name: data.user.first_name || data.user.username || 'Oyuncu',
+            username: data.user.username,
+            avatar: data.user.photo_url || '',
+            balance: data.user.chips,
           });
-
-          if (response.ok) {
-            const data = await response.json();
-            setCurrentUser({
-              id: data.user.id,
-              telegramId: data.user.telegram_id,
-              name: data.user.first_name || data.user.username || 'Oyuncu',
-              username: data.user.username,
-              avatar: data.user.photo_url || '',
-              balance: data.user.chips,
-            });
-            setAuthenticated(true);
-          } else {
-            setAuthError('Giriş yapılamadı');
-          }
-        } catch (error) {
-          console.error('Auth error:', error);
-          setAuthError('Bağlantı hatası');
+          setAuthenticated(true);
+        } else {
+          setAuthError('Giriş yapılamadı. Lütfen tekrar deneyin.');
         }
-      } else {
-        // Test modu - Telegram dışında çalışıyor
-        // Rastgele test kullanıcısı oluştur
-        const testTelegramId = Math.floor(100000000 + Math.random() * 900000000);
-
-        try {
-          const response = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              telegram_id: testTelegramId,
-              username: `test_user_${testTelegramId}`,
-              first_name: 'Test',
-              last_name: 'User',
-              init_data: '',
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setCurrentUser({
-              id: data.user.id,
-              telegramId: data.user.telegram_id,
-              name: data.user.first_name || 'Test User',
-              username: data.user.username,
-              avatar: '',
-              balance: data.user.chips,
-            });
-            setAuthenticated(true);
-          }
-        } catch (error) {
-          console.error('Test auth error:', error);
-        }
+      } catch (error) {
+        console.error('Auth error:', error);
+        setAuthError('Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.');
       }
 
       setLoading(false);
@@ -293,30 +265,40 @@ export default function Home() {
     );
   }
 
-  // Auth hatası
-  if (authError) {
+  // Auth hatası veya Telegram dışında açılmış
+  if (authError || !isAuthenticated || !currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 text-lg mb-4">{authError}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500"
-            type="button"
-          >
-            Tekrar Dene
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Auth olmamış
-  if (!isAuthenticated || !currentUser) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-white text-lg">Lütfen Telegram üzerinden giriş yapın</p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="mb-6">
+            <svg className="w-20 h-20 mx-auto text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-4">Telegram Gerekli</h1>
+          <p className="text-gray-400 text-lg mb-6">
+            {authError || 'Bu uygulama sadece Telegram Mini App olarak çalışır.'}
+          </p>
+          <div className="space-y-3">
+            <a
+              href="https://t.me/HarleyBlackjackBot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full px-6 py-3 bg-[#0088cc] text-white rounded-lg hover:bg-[#0077b5] transition-colors font-medium"
+            >
+              Telegram Bot'u Aç
+            </a>
+            <button
+              onClick={() => window.location.reload()}
+              className="block w-full px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              type="button"
+            >
+              Sayfayı Yenile
+            </button>
+          </div>
+          <p className="text-gray-500 text-sm mt-6">
+            Telegram uygulamasından @HarleyBlackjackBot'u açarak oyuna başlayabilirsiniz.
+          </p>
         </div>
       </div>
     );
