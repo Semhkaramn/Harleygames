@@ -4,6 +4,7 @@ import { createDeck, calculateHandValue, isBlackjack, type Card } from '@/lib/ga
 
 // Minimum kart sayısı - bu altına düşerse deste yenilenir
 const MIN_DECK_CARDS = 15;
+const BETTING_DURATION = 15; // 15 seconds for betting
 
 // Oyun durumunu getir
 export async function GET(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     // Oyuncuları getir
     const players = await sql`
-      SELECT gp.*, u.username, u.first_name, u.avatar
+      SELECT gp.*, u.username, u.first_name, u.avatar, u.photo_url
       FROM game_players gp
       JOIN users u ON gp.telegram_id = u.telegram_id
       WHERE gp.game_id = ${game.id}
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
           telegramId: p.telegram_id,
           name: p.first_name || p.username || 'Player',
           avatar: p.avatar || '🎭',
+          photoUrl: p.photo_url || null,
           seatNumber: p.seat_number,
           bet: p.bet,
           cards: p.cards || [],
@@ -94,26 +96,69 @@ export async function POST(request: NextRequest) {
         const deck = createDeck();
         const result = await sql`
           INSERT INTO games (room_id, status, deck)
-          VALUES (${room_id}, 'betting', ${JSON.stringify(deck)})
+          VALUES (${room_id}, 'waiting', ${JSON.stringify(deck)})
           RETURNING *
         `;
 
-        // Oda oyuncularını oyuna ekle
-        const roomPlayers = await sql`
-          SELECT rp.*, u.id as user_id
-          FROM room_players rp
-          JOIN users u ON rp.telegram_id = u.telegram_id
-          WHERE rp.room_id = ${room_id}
+        return NextResponse.json({ game: result[0] });
+      }
+
+      case 'start_betting': {
+        // Mevcut oyunu bul veya yeni oluştur
+        let games = await sql`
+          SELECT * FROM games
+          WHERE room_id = ${room_id} AND status IN ('waiting', 'results')
+          ORDER BY created_at DESC
+          LIMIT 1
         `;
 
-        for (const player of roomPlayers) {
+        let gameId: number;
+        const bettingEndTime = Date.now() + (BETTING_DURATION * 1000);
+
+        if (games.length === 0) {
+          // Yeni oyun oluştur
+          const deck = createDeck();
+          const result = await sql`
+            INSERT INTO games (room_id, status, deck, betting_end_time)
+            VALUES (${room_id}, 'betting', ${JSON.stringify(deck)}, ${bettingEndTime})
+            RETURNING *
+          `;
+          gameId = result[0].id;
+
+          // Oda oyuncularını oyuna ekle
+          const roomPlayers = await sql`
+            SELECT rp.*, u.id as user_id
+            FROM room_players rp
+            JOIN users u ON rp.telegram_id = u.telegram_id
+            WHERE rp.room_id = ${room_id}
+          `;
+
+          for (const player of roomPlayers) {
+            await sql`
+              INSERT INTO game_players (game_id, user_id, telegram_id, seat_number, status, bet, cards)
+              VALUES (${gameId}, ${player.user_id}, ${player.telegram_id}, ${player.seat_number}, 'waiting', 0, '[]')
+            `;
+          }
+        } else {
+          gameId = games[0].id;
+
+          // Mevcut oyunu bahis moduna geçir
           await sql`
-            INSERT INTO game_players (game_id, user_id, telegram_id, seat_number, status)
-            VALUES (${result[0].id}, ${player.user_id}, ${player.telegram_id}, ${player.seat_number}, 'waiting')
+            UPDATE games
+            SET status = 'betting', betting_end_time = ${bettingEndTime}
+            WHERE id = ${gameId}
+          `;
+
+          // Oyuncuların bahislerini ve kartlarını sıfırla
+          await sql`
+            UPDATE game_players
+            SET bet = 0, cards = '[]', status = 'waiting', is_turn = FALSE
+            WHERE game_id = ${gameId}
           `;
         }
 
-        return NextResponse.json({ game: result[0] });
+        games = await sql`SELECT * FROM games WHERE id = ${gameId}`;
+        return NextResponse.json({ game: games[0] });
       }
 
       case 'join': {
@@ -129,7 +174,7 @@ export async function POST(request: NextRequest) {
         // Aktif oyunu bul
         const games = await sql`
           SELECT * FROM games
-          WHERE room_id = ${room_id} AND status IN ('waiting', 'betting')
+          WHERE room_id = ${room_id} AND status IN ('waiting', 'betting', 'results')
           ORDER BY created_at DESC
           LIMIT 1
         `;
@@ -157,6 +202,11 @@ export async function POST(request: NextRequest) {
         }
 
         const game = games[0];
+
+        // Oyun sırasında katılınamaz
+        if (game.status === 'playing' || game.status === 'dealer-turn') {
+          return NextResponse.json({ error: 'Oyun sırasında katılamazsınız' }, { status: 400 });
+        }
 
         // Koltuğun boş olup olmadığını kontrol et (Race condition fix)
         const existingSeat = await sql`
@@ -193,6 +243,46 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, game_id: game.id });
       }
 
+      case 'leave': {
+        if (!player_id) {
+          return NextResponse.json({ error: 'Player ID required' }, { status: 400 });
+        }
+
+        // Oyuncuyu bul
+        const player = await sql`SELECT * FROM game_players WHERE id = ${player_id}`;
+        if (player.length === 0) {
+          return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+        }
+
+        // Aktif oyunu bul
+        const games = await sql`
+          SELECT * FROM games
+          WHERE id = ${player[0].game_id}
+        `;
+
+        if (games.length > 0) {
+          const game = games[0];
+          // Oyun sırasında ayrılamaz
+          if (game.status === 'playing' || game.status === 'dealer-turn') {
+            return NextResponse.json({ error: 'Oyun sırasında ayrılamazsınız' }, { status: 400 });
+          }
+        }
+
+        // Oyuncunun bahsini geri ver (eğer varsa ve oyun başlamadıysa)
+        if (player[0].bet > 0) {
+          await sql`
+            UPDATE users
+            SET chips = chips + ${player[0].bet}
+            WHERE telegram_id = ${player[0].telegram_id}
+          `;
+        }
+
+        // Oyuncuyu sil
+        await sql`DELETE FROM game_players WHERE id = ${player_id}`;
+
+        return NextResponse.json({ success: true });
+      }
+
       case 'bet': {
         if (!player_id || !bet) {
           return NextResponse.json({ error: 'Player ID and bet required' }, { status: 400 });
@@ -208,12 +298,22 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: `Bahis ${room.min_bet} ile ${room.max_bet} arasında olmalı` }, { status: 400 });
         }
 
-        // Kullanıcının yeterli bakiyesi var mı kontrol et
-        const player = await sql`SELECT telegram_id FROM game_players WHERE id = ${player_id}`;
+        // Oyuncuyu bul ve oyunun bahis modunda olup olmadığını kontrol et
+        const player = await sql`SELECT gp.*, g.status as game_status FROM game_players gp JOIN games g ON gp.game_id = g.id WHERE gp.id = ${player_id}`;
         if (player.length === 0) {
           return NextResponse.json({ error: 'Player not found' }, { status: 404 });
         }
 
+        if (player[0].game_status !== 'betting') {
+          return NextResponse.json({ error: 'Bahis zamanı değil' }, { status: 400 });
+        }
+
+        // Zaten bahis yapmış mı?
+        if (player[0].bet > 0) {
+          return NextResponse.json({ error: 'Zaten bahis yaptınız' }, { status: 400 });
+        }
+
+        // Kullanıcının yeterli bakiyesi var mı kontrol et
         const user = await sql`SELECT chips FROM users WHERE telegram_id = ${player[0].telegram_id}`;
         if (user.length === 0 || user[0].chips < bet) {
           return NextResponse.json({ error: 'Yetersiz bakiye' }, { status: 400 });
@@ -246,11 +346,29 @@ export async function POST(request: NextRequest) {
         `;
 
         if (games.length === 0) {
-          return NextResponse.json({ error: 'No active game' }, { status: 400 });
+          return NextResponse.json({ error: 'No active betting game' }, { status: 400 });
         }
 
         const game = games[0];
         const deck: Card[] = ensureDeckHasCards(game.deck as Card[]);
+
+        // Tüm oyuncuları al
+        const allPlayers = await sql`
+          SELECT * FROM game_players
+          WHERE game_id = ${game.id}
+          ORDER BY seat_number
+        `;
+
+        // Bahis koymayan oyuncuları "skipped" yap
+        for (const player of allPlayers) {
+          if (player.bet === 0 || player.bet === null) {
+            await sql`
+              UPDATE game_players
+              SET status = 'skipped'
+              WHERE id = ${player.id}
+            `;
+          }
+        }
 
         // Bahis koyan oyuncuları al
         const players = await sql`
@@ -260,7 +378,13 @@ export async function POST(request: NextRequest) {
         `;
 
         if (players.length === 0) {
-          return NextResponse.json({ error: 'No players with bets' }, { status: 400 });
+          // Hiç bahis koyan yok, oyunu bitir
+          await sql`
+            UPDATE games
+            SET status = 'results', ended_at = CURRENT_TIMESTAMP
+            WHERE id = ${game.id}
+          `;
+          return NextResponse.json({ success: true, message: 'No players with bets' });
         }
 
         // Her oyuncuya 2 kart ver
@@ -529,10 +653,10 @@ export async function POST(request: NextRequest) {
           dealerScore = calculateHandValue(dealerCards);
         }
 
-        // Sonuçları hesapla
+        // Sonuçları hesapla - sadece bahis koyan oyuncular için
         const players = await sql`
           SELECT * FROM game_players
-          WHERE game_id = ${game.id} AND bet > 0
+          WHERE game_id = ${game.id} AND bet > 0 AND status != 'skipped'
         `;
 
         const dealerHasBlackjack = isBlackjack(dealerCards);
@@ -646,10 +770,10 @@ async function moveToNextPlayer(gameId: number, currentPlayerId: string) {
     WHERE id = ${currentPlayerId}
   `;
 
-  // Sıradaki playing durumundaki oyuncuyu bul
+  // Sıradaki playing durumundaki oyuncuyu bul (skipped olanları atla)
   const nextPlayers = await sql`
     SELECT * FROM game_players
-    WHERE game_id = ${gameId} AND status = 'playing' AND is_turn = FALSE
+    WHERE game_id = ${gameId} AND status = 'playing' AND is_turn = FALSE AND bet > 0
     ORDER BY seat_number
     LIMIT 1
   `;
