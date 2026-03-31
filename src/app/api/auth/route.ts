@@ -58,11 +58,15 @@ export async function POST(request: NextRequest) {
       username: user.username,
       first_name: user.first_name,
       last_name: user.last_name,
+      photo_url: user.photo_url,
     });
 
     return NextResponse.json({
       success: true,
-      user: dbUser,
+      user: {
+        ...dbUser,
+        chips: Number(dbUser.chips), // Ensure chips is number
+      },
     });
   } catch (error) {
     console.error('Auth error:', error);
