@@ -258,10 +258,11 @@ export function useGameStore() {
         const dealerHasBlackjack = isBlackjack(dealerCards);
 
         if (playerHasBlackjack && !dealerHasBlackjack) {
+          // Blackjack: bahis geri + bahsin 1.5 katı = toplam 2.5x
           return {
             ...player,
             status: 'blackjack' as const,
-            chips: player.chips + player.bet * 2.5,
+            chips: player.chips + Math.floor(player.bet * 2.5),
           };
         }
 
